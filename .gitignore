@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+*.db
+data/uploads/*
+data/out/*
+!data/**/.gitkeep
+.pytest_cache/
+.DS_Store
