@@ -66,7 +66,14 @@ from app.verify import verify_assessment
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("spiredossier")
 
-app = FastAPI(title="SpireDossier")
+# The interactive API docs enumerate every endpoint and parameter. Useful in
+# development, an invitation in anything public, so they are opt-in.
+app = FastAPI(
+    title="SpireDossier",
+    docs_url="/docs" if os.environ.get("EXPOSE_API_DOCS") else None,
+    redoc_url="/redoc" if os.environ.get("EXPOSE_API_DOCS") else None,
+    openapi_url="/openapi.json" if os.environ.get("EXPOSE_API_DOCS") else None,
+)
 
 # Signed-cookie sessions. The secret is regenerated on restart, which logs
 # everyone out -- acceptable while accounts live in memory anyway, and it
@@ -90,6 +97,16 @@ ROLE_LIBRARY: Dict[str, RoleConstraints] = {}
 APPLICANTS: Dict[str, dict] = {}
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+def run_in_background(target, *args) -> None:
+    """Dispatch long work off the request.
+
+    A named seam rather than a bare threading.Thread call: tests replace this
+    to run inline. Patching threading.Thread itself would be global, and would
+    break the test client's own worker threads.
+    """
+    threading.Thread(target=target, args=args, daemon=True).start()
+
 
 def _sample_paths() -> tuple[Path, Path]:
     return (
@@ -123,6 +140,54 @@ def require_admin(request: Request):
             "The parsing workspace belongs to {}.".format(settings.agency_name),
         )
     return company, None
+
+
+def dossier_owners(dossier_id: str) -> set:
+    """Which company accounts a dossier legitimately belongs to.
+
+    A dossier is reachable by the employer whose opening it was assessed
+    against. Traced pair -> requisition -> source role -> company, so the
+    answer follows the data rather than being stored twice and drifting.
+    """
+    owners = set()
+    for run in RUNS.values():
+        for pair in run.pairs:
+            if pair.dossier_id != dossier_id:
+                continue
+            role_id = run.requisitions[pair.requisition_index].source_role_id
+            role = ROLE_LIBRARY.get(role_id) if role_id else None
+            if role is not None and role.company_id:
+                owners.add(role.company_id)
+    return owners
+
+
+def authorise_dossier(request: Request, dossier_id: str):
+    """Who may read one candidate's dossier.
+
+    Before this existed the dossier routes had no guard at all: anyone holding
+    a URL could read a candidate's name, email, phone, salary expectation and
+    the full text of their CV through ?blind=0, with no session. That is the
+    most sensitive data in the product.
+
+    Returns (company, forced_blind, redirect).
+    """
+    company, redirect = require_login(request)
+    if redirect is not None:
+        return None, True, redirect
+    if company.is_admin:
+        return company, False, None
+    if company.id in dossier_owners(dossier_id):
+        # An employer may read a candidate matched to their own opening, but
+        # cannot lift the blind: identity is released deliberately by the
+        # agency, not by editing a query string.
+        return company, True, None
+    return None, True, _error(
+        request,
+        "That candidate is not on one of your shortlists",
+        "You can open the candidates matched to roles your company posted. "
+        "If you expected to see this one, ask {} to run matching against your "
+        "openings.".format(settings.agency_name),
+    )
 
 
 def chrome(nav: str, request: Request = None) -> dict:
@@ -485,7 +550,7 @@ async def generate(
     # --- several CVs: run as a batch, report progress ---------------------
     if len(saved) > 1:
         batch = create_batch(files=saved, jd_text=jd_text, model=chosen, anonymise=bool(anonymise))
-        threading.Thread(target=run_batch, args=(batch.id, STORE), daemon=True).start()
+        run_in_background(run_batch, batch.id, STORE)
         return RedirectResponse("/batch/{}".format(batch.id), status_code=303)
 
     # --- one CV: straight through -----------------------------------------
@@ -590,7 +655,7 @@ async def match(
         assess_all=bool(assess_all),
         extraction_model=settings.extraction_model or chosen,
     )
-    threading.Thread(target=execute_run, args=(run.id, STORE), daemon=True).start()
+    run_in_background(execute_run, run.id, STORE)
     return RedirectResponse("/match/{}".format(run.id), status_code=303)
 
 
@@ -821,7 +886,7 @@ def match_library(request: Request,
     for cand, applicant in zip(run.candidates, APPLICANTS.values()):
         cand.prefs = applicant["prefs"]
 
-    threading.Thread(target=execute_run, args=(run.id, STORE), daemon=True).start()
+    run_in_background(execute_run, run.id, STORE)
     return RedirectResponse("/match/{}".format(run.id), status_code=303)
 
 
@@ -832,6 +897,10 @@ def match_demo(request: Request):
     Exists for the same reason /demo does: the matrix, the shortlists and the
     role tags need to be reviewable without spending anything.
     """
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
+
     import copy as _copy
 
     from app.matching import Affinity
@@ -912,7 +981,10 @@ def match_view(request: Request, run_id: str):
 
 
 @app.get("/match/{run_id}/status")
-def match_status(run_id: str):
+def match_status(request: Request, run_id: str):
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     run = RUNS.get(run_id)
     if run is None:
         raise HTTPException(404, "Match run not found.")
@@ -933,7 +1005,10 @@ def batch_view(request: Request, batch_id: str):
 
 
 @app.get("/batch/{batch_id}/status")
-def batch_status(batch_id: str):
+def batch_status(request: Request, batch_id: str):
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     batch = BATCHES.get(batch_id)
     if batch is None:
         raise HTTPException(404, "Batch not found.")
@@ -944,9 +1019,16 @@ def batch_status(batch_id: str):
 def demo(request: Request):
     """Render the built-in fixture dossier. No API call, no key required.
 
+    Behind sign-in because it writes to the shared store: left open it is an
+    unauthenticated way to grow server memory without limit.
+
     This exists so the UI, the template and the PDF path can be demonstrated
     and reviewed without spending a token.
     """
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
+
     from tests.fixtures import sample_dossier
 
     dossier = sample_dossier()
@@ -965,7 +1047,12 @@ def _get(dossier_id: str) -> Dossier:
 
 @app.get("/dossier/{dossier_id}", response_class=HTMLResponse)
 def review(request: Request, dossier_id: str, blind: Optional[int] = None):
+    _, forced_blind, redirect = authorise_dossier(request, dossier_id)
+    if redirect is not None:
+        return redirect
     dossier = _get(dossier_id)
+    if forced_blind:
+        blind = 1
     anonymise = bool(getattr(dossier, "anonymise", settings.anonymise_by_default)) if blind is None else bool(blind)
 
     # Blind must be blind everywhere, the source pane included. Redaction
@@ -1012,13 +1099,23 @@ def review(request: Request, dossier_id: str, blind: Optional[int] = None):
 
 
 @app.get("/dossier/{dossier_id}/embed", response_class=HTMLResponse)
-def embed(dossier_id: str, blind: int = 1):
+def embed(request: Request, dossier_id: str, blind: int = 1):
     """The dossier itself, for the review page's iframe."""
+    _, forced_blind, redirect = authorise_dossier(request, dossier_id)
+    if redirect is not None:
+        return redirect
+    if forced_blind:
+        blind = 1
     return HTMLResponse(render_html(_get(dossier_id), anonymise=bool(blind)))
 
 
 @app.get("/dossier/{dossier_id}/pdf")
-def pdf(dossier_id: str, blind: int = 1):
+def pdf(request: Request, dossier_id: str, blind: int = 1):
+    _, forced_blind, redirect = authorise_dossier(request, dossier_id)
+    if redirect is not None:
+        return redirect
+    if forced_blind:
+        blind = 1
     dossier = _get(dossier_id)
     ref = candidate_ref(dossier)
     out = settings.output_dir / "{}_{}.pdf".format(ref, "blind" if blind else "named")
