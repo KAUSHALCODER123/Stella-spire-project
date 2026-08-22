@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ ref }} — {{ brief.role_title }}</title>
+<style>
+  /* A4 print geometry. The running footer carries the reference on every
+     page, because these get printed and separated in interview panels. */
+  @page {
+    size: A4;
+    margin: 16mm 14mm 18mm 14mm;
+    @bottom-left  { content: "{{ agency.name }} · Candidate Dossier · {{ ref }}"; font-size: 7.5pt; color: #8A94A6; }
+    @bottom-right { content: counter(page) " / " counter(pages); font-size: 7.5pt; color: #8A94A6; }
+  }
+
+  :root {
+    --accent: {{ agency.accent }};
+    --accent-soft: {{ agency.accent_soft }};
+    --ink: #1A1D23;
+    --muted: #5B6472;
+    --faint: #8A94A6;
+    --rule: #DFE4EC;
+    --strong: #1B7F5A;
+    --partial: #B8860B;
+    --absent: #A33A3A;
+    --high: #A33A3A;
+    --medium: #B8860B;
+    --low: #5B6472;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 9.5pt;
+    line-height: 1.5;
+    color: var(--ink);
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  h1, h2, h3 { margin: 0; font-weight: 600; }
+
+  /* --- masthead ------------------------------------------------------- */
+  .masthead {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 2.5px solid var(--accent);
+    padding-bottom: 9px;
+    margin-bottom: 16px;
+  }
+  .brand { font-size: 15pt; font-weight: 700; color: var(--accent); letter-spacing: -0.2px; }
+  .brand .tagline { display: block; font-size: 7.5pt; font-weight: 400; color: var(--faint); letter-spacing: 0.3px; margin-top: 1px; }
+  .masthead .meta { text-align: right; font-size: 8pt; color: var(--muted); line-height: 1.6; }
+  .masthead .meta strong { color: var(--ink); }
+
+  /* --- candidate identity --------------------------------------------- */
+  .identity { margin-bottom: 14px; }
+  .identity h1 { font-size: 17pt; letter-spacing: -0.3px; }
+  .identity .headline { color: var(--muted); font-size: 10pt; margin-top: 2px; }
+  .identity .contact { font-size: 8.5pt; color: var(--faint); margin-top: 4px; }
+  .anon-note {
+    display: inline-block; margin-top: 5px; padding: 2px 7px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 7.5pt; font-weight: 600; border-radius: 2px; letter-spacing: 0.2px;
+  }
+
+  /* --- section scaffolding -------------------------------------------- */
+  section { margin-bottom: 15px; }
+  h2 {
+    font-size: 8pt; text-transform: uppercase; letter-spacing: 1.1px;
+    color: var(--accent); border-bottom: 1px solid var(--rule);
+    padding-bottom: 3px; margin-bottom: 8px;
+  }
+  p { margin: 0 0 6px 0; }
+
+  /* --- at a glance ----------------------------------------------------- */
+  .glance { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+  .glance .cell { flex: 1 1 20%; min-width: 92px; padding: 7px 10px; border-right: 1px solid var(--rule); }
+  .glance .cell:last-child { border-right: none; }
+  .glance .label { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.6px; color: var(--faint); }
+  .glance .value { font-size: 11pt; font-weight: 600; margin-top: 1px; }
+  .glance .value .unit { font-size: 8pt; font-weight: 400; color: var(--muted); }
+
+  /* --- coverage bar ---------------------------------------------------- */
+  .coverage { margin-top: 9px; }
+  .coverage .bar { height: 7px; background: var(--rule); border-radius: 4px; overflow: hidden; display: flex; }
+  .coverage .fill-strong  { background: var(--strong); }
+  .coverage .fill-partial { background: var(--partial); }
+  .coverage .caption { font-size: 8pt; color: var(--muted); margin-top: 4px; }
+
+  /* --- requirement table ----------------------------------------------- */
+  table.reqs { width: 100%; border-collapse: collapse; }
+  table.reqs th {
+    text-align: left; font-size: 7pt; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--faint); border-bottom: 1px solid var(--rule); padding: 0 6px 3px 0; font-weight: 600;
+  }
+  table.reqs td { padding: 6px 6px 6px 0; border-bottom: 1px solid #F0F2F6; vertical-align: top; }
+  table.reqs tr { page-break-inside: avoid; }
+  .req-text { font-weight: 500; }
+  .must { font-size: 7pt; color: var(--accent); font-weight: 700; letter-spacing: 0.4px; }
+
+  .verdict { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
+  .v-strong  { color: var(--strong); }
+  .v-partial { color: var(--partial); }
+  .v-absent  { color: var(--absent); }
+  .v-unclear { color: var(--muted); }
+
+  /* Every claim in this document is followed by the text it came from.
+     The quote styling is deliberately prominent -- it is the product. */
+  .evidence {
+    margin-top: 3px; padding-left: 8px; border-left: 2px solid var(--accent-soft);
+    font-size: 8.5pt; color: var(--muted); font-style: italic;
+  }
+  .note { margin-top: 3px; font-size: 8.5pt; color: var(--ink); }
+
+  /* --- risk flags ------------------------------------------------------ */
+  .flag { border-left: 3px solid var(--low); padding: 6px 0 6px 9px; margin-bottom: 7px; page-break-inside: avoid; }
+  .flag.high   { border-left-color: var(--high); }
+  .flag.medium { border-left-color: var(--medium); }
+  .flag-head { display: flex; gap: 7px; align-items: baseline; }
+  .sev { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sev.high { color: var(--high); } .sev.medium { color: var(--medium); } .sev.low { color: var(--low); }
+  .flag-kind { font-size: 7pt; color: var(--faint); text-transform: uppercase; letter-spacing: 0.5px; }
+  .flag-summary { margin-top: 2px; }
+  .computed-tag {
+    font-size: 6.5pt; font-weight: 700; letter-spacing: 0.4px; color: var(--accent);
+    background: var(--accent-soft); padding: 1px 5px; border-radius: 2px;
+  }
+
+  /* --- career timeline -------------------------------------------------- */
+  .role { padding: 6px 0; border-bottom: 1px solid #F0F2F6; page-break-inside: avoid; }
+  .role:last-child { border-bottom: none; }
+  .role-head { display: flex; justify-content: space-between; gap: 10px; }
+  .role-title { font-weight: 600; }
+  .role-company { color: var(--muted); }
+  .role-dates { font-size: 8.5pt; color: var(--faint); white-space: nowrap; }
+  .role ul { margin: 3px 0 0 0; padding-left: 15px; }
+  .role li { margin-bottom: 1px; color: var(--muted); }
+  .gap-marker {
+    margin: 5px 0; padding: 3px 9px; background: #FDF6E7; border-left: 3px solid var(--medium);
+    font-size: 8pt; color: #7A5A12;
+  }
+
+  /* --- skills ----------------------------------------------------------- */
+  .skill-group { margin-bottom: 6px; }
+  .skill-cat { font-size: 7pt; text-transform: uppercase; letter-spacing: 0.6px; color: var(--faint); margin-bottom: 2px; }
+  .chip { display: inline-block; padding: 1.5px 7px; margin: 0 3px 3px 0; border-radius: 9px; font-size: 8.5pt; border: 1px solid var(--rule); }
+  .chip.evidenced { background: #EFF7F3; border-color: #BFE0D0; color: #14603F; }
+  .chip.listed { background: #FFF; color: var(--faint); border-style: dashed; }
+  .skill-legend { font-size: 7.5pt; color: var(--faint); margin-top: 3px; }
+
+  ul.plain { margin: 0; padding-left: 15px; }
+  ul.plain li { margin-bottom: 3px; }
+
+  /* --- provenance ------------------------------------------------------- */
+  .provenance {
+    margin-top: 16px; padding-top: 7px; border-top: 1px solid var(--rule);
+    font-size: 7.5pt; color: var(--faint); line-height: 1.6;
+  }
+  .warnings { margin-top: 6px; padding: 6px 9px; background: #FDF6E7; border-left: 3px solid var(--medium); font-size: 8pt; color: #7A5A12; }
+</style>
+</head>
+<body>
+
+<div class="masthead">
+  <div class="brand">
+    {{ agency.name }}
+    <span class="tagline">{{ agency.tagline }}</span>
+  </div>
+  <div class="meta">
+    <strong>{{ brief.role_title }}</strong><br>
+    {% if brief.client_name %}{{ brief.client_name }}<br>{% endif %}
+    Ref {{ ref }} · {{ generated_on }}
+  </div>
+</div>
+
+<div class="identity">
+  {% if anonymise %}
+    <h1>Candidate {{ ref }}</h1>
+    <div class="headline">{{ profile.headline or "Profile summary withheld" }}</div>
+    <div class="anon-note">Blind profile — identity released on shortlist</div>
+  {% else %}
+    <h1>{{ profile.full_name or "Name not found" }}</h1>
+    {% if profile.headline %}<div class="headline">{{ profile.headline }}</div>{% endif %}
+    <div class="contact">
+      {{ [profile.location, profile.email, profile.phone] | select | join(" · ") }}
+    </div>
+  {% endif %}
+</div>
+
+<section>
+  <h2>Executive Summary</h2>
+  <p>{{ assessment.executive_summary }}</p>
+</section>
+
+<section>
+  <h2>At a Glance</h2>
+  <div class="glance">
+    <div class="cell">
+      <div class="label">Experience</div>
+      <div class="value">{{ timeline.total_experience_years }}<span class="unit"> yrs</span></div>
+    </div>
+    <div class="cell">
+      <div class="label">Avg. tenure</div>
+      <div class="value">{{ timeline.average_tenure_years }}<span class="unit"> yrs</span></div>
+    </div>
+    <div class="cell">
+      <div class="label">Location</div>
+      <div class="value" style="font-size:9.5pt">{{ profile.location or "—" }}</div>
+    </div>
+    <div class="cell">
+      <div class="label">Notice</div>
+      <div class="value">{% if profile.notice_period_days %}{{ profile.notice_period_days }}<span class="unit"> days</span>{% else %}—{% endif %}</div>
+    </div>
+    <div class="cell">
+      <div class="label">Expected CTC</div>
+      <div class="value">{% if profile.expected_ctc_lpa %}{{ profile.expected_ctc_lpa }}<span class="unit"> LPA</span>{% else %}—{% endif %}</div>
+    </div>
+  </div>
+
+  {% if coverage is not none %}
+  <div class="coverage">
+    <div class="bar">
+      <div class="fill-strong" style="width: {{ (strong_pct * 100) | round(0) }}%"></div>
+      <div class="fill-partial" style="width: {{ (partial_pct * 100) | round(0) }}%"></div>
+    </div>
+    <div class="caption">
+      <strong>{{ (coverage * 100) | round(0) | int }}% of must-have requirements met</strong>
+      — {{ counts.strong }} strong, {{ counts.partial }} partial, {{ counts.absent }} absent,
+      {{ counts.unclear }} unclear, across {{ assessment.requirement_matches | length }} requirements.
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Fit Rationale</h2>
+  <p>{{ assessment.fit_rationale }}</p>
+</section>
+
+{% if assessment.requirement_matches %}
+<section>
+  <h2>Requirement Match</h2>
+  <table class="reqs">
+    <thead>
+      <tr><th style="width:64%">Requirement &amp; evidence from CV</th><th style="width:36%">Verdict</th></tr>
+    </thead>
+    <tbody>
+      {% for m in assessment.requirement_matches %}
+      <tr>
+        <td>
+          <div class="req-text">
+            {{ m.requirement }}
+            {% if m.requirement in must_have_texts %}<span class="must">MUST</span>{% endif %}
+          </div>
+          {% if m.evidence %}<div class="evidence">“{{ m.evidence }}”</div>{% endif %}
+          {% if m.note %}<div class="note">{{ m.note }}</div>{% endif %}
+        </td>
+        <td><span class="verdict v-{{ m.verdict }}">{{ m.verdict }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if flags %}
+<section>
+  <h2>Flags for Recruiter Review</h2>
+  {% for f in flags %}
+  <div class="flag {{ f.severity }}">
+    <div class="flag-head">
+      <span class="sev {{ f.severity }}">{{ f.severity }}</span>
+      <span class="flag-kind">{{ f.kind | replace("_", " ") }}</span>
+      {% if f.kind in computed_kinds %}<span class="computed-tag">COMPUTED</span>{% endif %}
+    </div>
+    <div class="flag-summary">{{ f.summary }}</div>
+    {% if f.evidence %}<div class="evidence">{{ f.evidence }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section>
+  <h2>Career Timeline</h2>
+  {% for item in timeline_items %}
+    {% if item.gap %}
+      <div class="gap-marker">{{ item.months }}-month gap — {{ item.from }} to {{ item.to }}</div>
+    {% else %}
+      <div class="role">
+        <div class="role-head">
+          <div><span class="role-title">{{ item.position.title }}</span>,
+               <span class="role-company">{{ item.position.company }}</span></div>
+          <div class="role-dates">{{ item.label }}{% if item.months %} · {{ item.months }} mo{% endif %}</div>
+        </div>
+        {% if item.position.achievements %}
+        <ul>
+          {% for a in item.position.achievements[:3] %}<li>{{ a }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    {% endif %}
+  {% endfor %}
+</section>
+
+{% if skills_by_category %}
+<section>
+  <h2>Skills</h2>
+  {% for category, skills in skills_by_category.items() %}
+  <div class="skill-group">
+    <div class="skill-cat">{{ category }}</div>
+    {% for s in skills %}
+      <span class="chip {{ 'evidenced' if s.evidence else 'listed' }}">{{ s.name }}</span>
+    {% endfor %}
+  </div>
+  {% endfor %}
+  <div class="skill-legend">
+    Solid = demonstrated in described work. Dashed = listed on the CV with no supporting detail found.
+  </div>
+</section>
+{% endif %}
+
+{% if assessment.open_questions %}
+<section>
+  <h2>Questions for the Screening Call</h2>
+  <ul class="plain">
+    {% for q in assessment.open_questions %}<li>{{ q }}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<div class="provenance">
+  Generated by SpireDossier in {{ elapsed }}s from <em>{{ source_filename }}</em>
+  ({{ source_format | upper }}{% if page_count %}, {{ page_count }} pages{% endif %}).
+  Timeline figures, employment gaps and tenure are computed arithmetically from the CV dates and are marked COMPUTED.
+  All other statements are model-generated and carry the CV quote they rest on — verify anything unquoted before sending to a client.
+  {% if usage %}<br>Model {{ model }} · {{ usage.input_tokens }} in / {{ usage.output_tokens }} out tokens across {{ usage.calls }} calls.{% endif %}
+  {% if warnings %}
+  <div class="warnings">
+    {% for w in warnings %}<div>{{ w }}</div>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+</body>
+</html>

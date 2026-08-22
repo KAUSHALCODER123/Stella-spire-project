@@ -26,6 +26,7 @@ class DocumentText:
     text: str
     page_count: int
     source_format: str
+    filename: str = ""
     warnings: List[str] = field(default_factory=list)
 
     @property
@@ -109,6 +110,7 @@ def extract_text(path: str | Path) -> DocumentText:
     else:
         result = _from_text(path)
 
+    result.filename = path.name
     if not result.text.strip():
         result.warnings.append("No text could be read from this document at all.")
 
