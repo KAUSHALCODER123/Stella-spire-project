@@ -191,6 +191,8 @@ def run_batch(batch_id: str, store: Dict[str, Dossier]) -> None:
             dossier_id = uuid.uuid4().hex[:12]
             dossier.anonymise = batch.anonymise  # type: ignore[attr-defined]
             store[dossier_id] = dossier
+            from app import db as _db
+            _db.save_dossier(dossier_id, dossier)
 
             with batch._lock:
                 batch.usage.input_tokens += dossier.usage.input_tokens

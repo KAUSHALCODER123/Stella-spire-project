@@ -43,6 +43,7 @@ from app.accounts import (
     sign_in,
     sign_out,
 )
+from app import db
 from app.batch import BATCHES, create_batch, run_batch, status_payload
 from app.intake import (
     CandidatePreferences,
@@ -85,7 +86,6 @@ app.add_middleware(
     https_only=False,
 )
 
-seed()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 STORE: Dict[str, Dossier] = {}
@@ -98,10 +98,50 @@ APPLICANTS: Dict[str, dict] = {}
 
 # A populated board on first run. Five empty states hide the behaviour
 # worth looking at; set SEED_DEMO_DATA=0 to start clean.
+def _restore() -> dict:
+    """Bring persisted state back before anything is seeded.
+
+    Order matters: seeding is idempotent only if it can see what already
+    exists, otherwise every restart would duplicate the demo board.
+    """
+    from app.accounts import load_from_db
+
+    restored = {"companies": 0, "roles": 0, "applicants": 0, "dossiers": 0}
+    if db.get_db() is None:
+        return restored
+
+    restored["companies"] = load_from_db()
+    for role_id, role in db.load_roles():
+        ROLE_LIBRARY[role_id] = role
+        restored["roles"] += 1
+    for applicant_id, record in db.load_applicants():
+        APPLICANTS[applicant_id] = record
+        restored["applicants"] += 1
+    for dossier_id, dossier in db.load_dossiers():
+        STORE[dossier_id] = dossier
+        restored["dossiers"] += 1
+
+    log.info("restored %s from the database", restored)
+    return restored
+
+
+RESTORED = {"companies": 0, "roles": 0, "applicants": 0, "dossiers": 0}
+
+
+RESTORED = _restore()
+seed()
+
 if os.environ.get("SEED_DEMO_DATA", "1") != "0":
     from app.seed_data import seed_board
 
-    seed_board(ROLE_LIBRARY, APPLICANTS)
+    _seeded = seed_board(ROLE_LIBRARY, APPLICANTS)
+    if not _seeded.get("skipped"):
+        # Persist the seed so a restart restores it rather than
+        # regenerating it with fresh ids.
+        for _rid, _role in ROLE_LIBRARY.items():
+            db.save_role(_rid, _role)
+        for _aid, _rec in APPLICANTS.items():
+            db.save_applicant(_aid, _rec)
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
@@ -585,6 +625,7 @@ async def generate(
     dossier_id = uuid.uuid4().hex[:12]
     dossier.anonymise = bool(anonymise)  # type: ignore[attr-defined]
     STORE[dossier_id] = dossier
+    db.save_dossier(dossier_id, dossier)
     return RedirectResponse("/dossier/{}".format(dossier_id), status_code=303)
 
 
@@ -744,7 +785,9 @@ async def post_role(
         notes=notes.strip() or None,
     )
     rc.company_id = company.id
-    ROLE_LIBRARY[uuid.uuid4().hex[:10]] = rc
+    role_id = uuid.uuid4().hex[:10]
+    ROLE_LIBRARY[role_id] = rc
+    db.save_role(role_id, rc)
     return RedirectResponse("/roles", status_code=303)
 
 
@@ -778,6 +821,7 @@ def delete_role(request: Request, role_id: str):
     role = ROLE_LIBRARY.get(role_id)
     if role is not None and (company.is_admin or role.company_id == company.id):
         ROLE_LIBRARY.pop(role_id, None)
+        db.delete_role(role_id)
     return RedirectResponse("/roles", status_code=303)
 
 
@@ -843,12 +887,14 @@ async def apply(
         years_experience=_num(years_experience),
         notes=notes.strip() or None,
     )
-    APPLICANTS[uuid.uuid4().hex[:10]] = {
+    applicant_id = uuid.uuid4().hex[:10]
+    APPLICANTS[applicant_id] = {
         "prefs": prefs,
         "path": path,
         "filename": display_filename(cv.filename),
         "stored": stored,
     }
+    db.save_applicant(applicant_id, APPLICANTS[applicant_id])
 
     ctx = chrome("apply", request)
     ctx.update({"applicant": prefs, "roles": list(ROLE_LIBRARY.values())})
@@ -1202,4 +1248,6 @@ def health():
         "model_choices": [m[0] for m in available_models()],
         "dossiers_in_memory": len(STORE),
         "storage": "supabase" if get_storage() else "local disk only",
+        "database": db.status(),
+        "restored_at_startup": RESTORED,
     }

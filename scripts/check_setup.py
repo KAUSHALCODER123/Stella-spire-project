@@ -95,6 +95,31 @@ def main() -> int:
     if usage:
         print("      Test call used {} in / {} out tokens.".format(usage.input_tokens, usage.output_tokens))
 
+    # --- persistence ------------------------------------------------------
+    from app import db as _db
+
+    state = _db.status()
+    if state["connected"]:
+        print("OK    Database: {}".format(state["detail"]))
+    else:
+        print("WARN  Database: {}".format(state["detail"]))
+        print("      State is in memory only, so a restart clears accounts,")
+        print("      roles, applicants and dossiers.")
+        if "tables not created" in (state["detail"] or ""):
+            print("      Fix: open the Supabase SQL editor and run")
+            print("           migrations/001_init.sql")
+
+    from app.storage import get_storage
+
+    client = get_storage()
+    if client is None:
+        print("WARN  File archiving: not configured (local disk only)")
+    else:
+        check = client.check()
+        print("{}  File archiving: {}".format(
+            "OK   " if check.get("ok") else "WARN ",
+            "supabase storage" if check.get("ok") else check.get("detail")))
+
     print("-" * 52)
     print("All checks passed. Next:  python -m scripts.run_pipeline --sample")
     return 0

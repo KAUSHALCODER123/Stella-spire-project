@@ -15,16 +15,23 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def no_remote_storage(monkeypatch):
-    """Uploads write locally only. The archiving path has its own tests."""
-    from app import storage
+def no_remote_services(monkeypatch):
+    """No network at all: uploads write locally, state stays in memory.
+
+    Both clients cache their connection in a module global, so those are reset
+    on the way in and out -- otherwise one test that connects would leak a live
+    client into every test after it.
+    """
+    from app import db, storage
     from app.config import settings
 
     monkeypatch.setattr(settings, "supabase_url", "", raising=False)
     monkeypatch.setattr(settings, "supabase_key", "", raising=False)
     monkeypatch.setattr(storage, "_client", None, raising=False)
+    db.reset_for_tests()
     yield
     monkeypatch.setattr(storage, "_client", None, raising=False)
+    db.reset_for_tests()
 
 
 @pytest.fixture

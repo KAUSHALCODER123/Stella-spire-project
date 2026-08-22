@@ -104,6 +104,9 @@ def create_company(*, name: str, email: str, password: str, is_admin: bool = Fal
         website=(website or "").strip() or None,
     )
     COMPANIES[company.id] = company
+
+    from app import db
+    db.save_company(company)
     return company
 
 
@@ -117,6 +120,25 @@ def authenticate(email: str, password: str) -> Optional[Company]:
     if not verify_password(password, company.password_hash):
         return None
     return company
+
+
+def load_from_db() -> int:
+    """Rebuild the in-memory account map from storage.
+
+    The dict stays the working cache; the database is the record. Nothing
+    downstream has to know which one it is reading.
+    """
+    from app import db
+
+    rows = db.load_companies()
+    for row in rows:
+        COMPANIES[row["id"]] = Company(
+            id=row["id"], name=row["name"], email=row["email"],
+            password_hash=row["password_hash"], is_admin=bool(row.get("is_admin")),
+            industry=row.get("industry"), location=row.get("location"),
+            website=row.get("website"),
+        )
+    return len(rows)
 
 
 def seed(force: bool = False) -> List[Company]:

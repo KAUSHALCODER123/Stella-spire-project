@@ -398,6 +398,8 @@ def _execute(run: MatchRun, store: Dict[str, Dossier]) -> None:
             dossier.anonymise = run.anonymise  # type: ignore[attr-defined]
             dossier_id = uuid.uuid4().hex[:12]
             store[dossier_id] = dossier
+            from app import db as _db
+            _db.save_dossier(dossier_id, dossier)
             pair.dossier, pair.dossier_id, pair.status = dossier, dossier_id, "done"
         except Exception as exc:  # noqa: BLE001 - one pair must not stop the run
             log.error("run %s: pair c%d/r%d failed: %s", run.id, pair.candidate_index,
