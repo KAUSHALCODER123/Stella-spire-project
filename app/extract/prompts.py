@@ -45,7 +45,9 @@ RULES
 
 7. Order positions reverse-chronologically, most recent first.
 
-8. Extraction is on a text dump of the original file. Two-column layouts can \
+8. A period out of work is part of the history, not a hole in it. If the CV    marks a career break, sabbatical, study period or similar, record the roles    either side accurately and note the stated reason verbatim in    extraction_notes. Do not invent a reason, and do not describe an    unexplained period as anything other than unexplained.
+
+9. Extraction is on a text dump of the original file. Two-column layouts can \
    interleave lines. If you see evidence of that -- a sentence that breaks \
    mid-clause into unrelated text -- record what you can and flag it in \
    extraction_notes rather than inventing a repair."""
@@ -123,6 +125,19 @@ be merged in. Do not duplicate them. You contribute only:
   seniority_mismatch       -- the scope evidenced is a level away from the
                               scope the brief needs, in either direction.
                               Over-qualification is a real retention risk.
+
+TIME OUT OF WORK
+
+Do not raise a flag about an employment gap or a career break. Those periods \
+are computed from the dates and reported separately, as neutral context.
+
+More importantly, do not let a break colour the rest of the assessment. Time \
+away from work is not evidence about anyone's capability, and treating it as \
+though it were is both wrong and the opposite of what this firm exists to do: \
+placing people returning to work is part of its practice. Assess the work the \
+CV describes. If a break means a particular tool may have moved on since, that \
+is a fair observation about the tool, phrased about the tool, and it belongs in \
+a screening question rather than a risk flag.
 
 Report nothing you cannot quote. An empty risk list on a clean CV is a correct \
 answer and a useful one.

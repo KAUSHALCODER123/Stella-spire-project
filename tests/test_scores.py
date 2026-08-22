@@ -75,11 +75,33 @@ def test_zero_stated_min_years_is_treated_as_unspecified():
     (10.0, 12.0, "close"),     # ratio .83
     (5.0, 12.0, "short"),      # ratio .42
 ])
-def test_experience_verdicts(actual_years, required, verdict):
-    d = sample_dossier()
-    d.brief.stated_min_years = required
+def test_experience_verdicts_on_an_unbroken_career(actual_years, required, verdict):
+    """No break, so worked years and calendar span are the same number."""
+    d = empty_dossier(brief=JobBrief(role_title="R", stated_min_years=required))
     d.timeline.total_experience_months = int(actual_years * 12)
     assert d.experience_match["verdict"] == verdict
+
+
+def test_a_career_break_does_not_cost_someone_the_experience_bar():
+    """Two people who started work on the same day are equally senior.
+
+    Measuring only billed months quietly penalises anyone who took time out,
+    which is precisely the group this firm places.
+    """
+    d = sample_dossier()
+    d.brief.stated_min_years = 15
+    exp = d.experience_match
+
+    assert exp["months_out"] > 0, "the sample candidate should have a break"
+    assert exp["actual"] < 15, "worked years alone fall short of the bar"
+    assert exp["span"] >= 15, "the calendar span clears it"
+    assert exp["verdict"] == "meets"
+
+
+def test_both_numbers_are_reported_so_nothing_is_hidden():
+    exp = sample_dossier().experience_match
+    assert exp["actual"] != exp["span"]
+    assert exp["months_out"] == 19
 
 
 def test_experience_ratio_is_capped_at_one():

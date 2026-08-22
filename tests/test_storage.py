@@ -176,7 +176,7 @@ ILLEGAL_IN_URL = ' "<>^`{|}' + chr(92)
 
 
 def test_a_filename_with_spaces_produces_a_valid_url(configured, monkeypatch, tmp_path):
-    """Regression: "Arjun Menon CV.txt" is a legal filename and an illegal URL.
+    """Regression: "Meera Ramanathan CV.txt" is a legal filename and an illegal URL.
 
     urllib raises InvalidURL on the raw space, so every real CV -- almost all
     of which have spaces in the name -- silently failed to archive while the
@@ -189,8 +189,8 @@ def test_a_filename_with_spaces_produces_a_valid_url(configured, monkeypatch, tm
         return FakeResponse(200)
 
     monkeypatch.setattr(configured.urllib.request, "urlopen", fake_open)
-    path = tmp_path / "ff9d_Arjun Menon CV.txt"
-    result = store_document(payload=b"B", filename="Arjun Menon CV.txt",
+    path = tmp_path / "ff9d_Meera Ramanathan CV.txt"
+    result = store_document(payload=b"B", filename="Meera Ramanathan CV.txt",
                             kind="resume", local_path=path)
 
     assert result.archived, result.error
@@ -199,7 +199,7 @@ def test_a_filename_with_spaces_produces_a_valid_url(configured, monkeypatch, tm
 
 
 @pytest.mark.parametrize("name", [
-    "Arjun Menon CV.txt",
+    "Meera Ramanathan CV.txt",
     "CV (final) v2.pdf",
     "Résumé Ann.pdf",
     "cv#1&2.docx",
@@ -219,6 +219,6 @@ def test_awkward_filenames_all_produce_valid_urls(configured, monkeypatch, tmp_p
 
 def test_public_url_is_encoded_too(configured):
     client = SupabaseStorage("https://example.supabase.co", "k")
-    url = client.public_url("resumes", "Arjun Menon CV.txt")
+    url = client.public_url("resumes", "Meera Ramanathan CV.txt")
     assert " " not in url and "%20" in url
     assert url.startswith("https://example.supabase.co/storage/v1/object/public/resumes/")

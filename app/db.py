@@ -328,7 +328,7 @@ def _rehydrate(row: dict):
 
     dossier = Dossier(
         profile=profile, timeline=timeline, brief=brief, assessment=assessment,
-        flags=sort_flags(derive_risk_flags(profile, timeline) + assessment.risk_flags),
+        flags=sort_flags(derive_risk_flags(profile, timeline, document.text) + assessment.risk_flags),
         document=document,
         usage=Usage(input_tokens=usage_row.get("input_tokens", 0),
                     output_tokens=usage_row.get("output_tokens", 0),

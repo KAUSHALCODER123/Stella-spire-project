@@ -201,8 +201,8 @@ def test_preferences_fall_back_to_what_the_cv_stated():
 
     profile = sample_profile()
     p = preferences_from_profile(profile, build_timeline(profile))
-    assert p.notice_period_days == 90
-    assert p.expected_ctc_lpa == 90.0
+    assert p.notice_period_days == 60
+    assert p.expected_ctc_lpa == 105.0
     assert p.current_location == "Bengaluru, Karnataka"
     assert p.years_experience and p.years_experience > 0
 
@@ -213,7 +213,7 @@ def test_cv_derived_preferences_still_drive_the_gate():
 
     profile = sample_profile()
     p = preferences_from_profile(profile, build_timeline(profile))
-    # The CV asks 90 LPA; this role tops out at 45.
+    # The CV asks 105 LPA; this role tops out at 45.
     c = check_constraints(p, role(ctc_max_lpa=45))
     assert c.warnings or c.blocked
 

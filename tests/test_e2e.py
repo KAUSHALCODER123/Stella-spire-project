@@ -45,8 +45,8 @@ def stub_llm(monkeypatch, inline_threads):
 
     def fake_brief(jd_text, usage=None, model=None):
         return JobBrief(role_title="Stub", stated_min_years=3, requirements=[
-            Requirement(text="Kubernetes", kind="must_have", category="technical"),
-            Requirement(text="PyTorch", kind="must_have", category="technical"),
+            Requirement(text="Controllership", kind="must_have", category="domain"),
+            Requirement(text="Ind AS 109", kind="must_have", category="domain"),
         ])
 
     def fake_profile(text, usage=None, model=None):
@@ -100,9 +100,9 @@ def test_register_post_apply_match_and_see_your_own_shortlist(stub_llm):
     assert r.status_code == 303 and r.headers["location"] == "/dashboard"
 
     # 2. They post a role.
-    role_id = post_role(employer, "ML Platform Lead", location="Bengaluru",
+    role_id = post_role(employer, "Head of Finance", location="Bengaluru",
                         min_years=4, ctc_min_lpa=40, ctc_max_lpa=90,
-                        max_notice_days=90, must_have_skills="Kubernetes, PyTorch")
+                        max_notice_days=90, must_have_skills="Controllership, Ind AS 109")
     assert ROLE_LIBRARY[role_id].company_id is not None
 
     # 3. A candidate applies through the public form.
@@ -120,7 +120,7 @@ def test_register_post_apply_match_and_see_your_own_shortlist(stub_llm):
     # 5. The employer sees the candidate on their own dashboard.
     body = employer.get("/dashboard", headers=HTML).text
     assert "Candidates matched to your roles" in body
-    assert "ML Platform Lead" in body
+    assert "Head of Finance" in body
 
     # 6. And can open that dossier.
     dossier_id = run.assessed_pairs[0].dossier_id
@@ -130,7 +130,7 @@ def test_register_post_apply_match_and_see_your_own_shortlist(stub_llm):
 def test_an_employer_cannot_open_another_companys_candidate(stub_llm):
     a = signed_in("hiring@fintrail.example")
     b = signed_in("careers@alderline.example")
-    post_role(a, "Fintrail Role", min_years=2, must_have_skills="Kubernetes")
+    post_role(a, "Fintrail Role", min_years=2, must_have_skills="Controllership")
     apply_as("Some Candidate", years_experience=9)
 
     signed_in(ADMIN_EMAIL).post("/roles/match", data={"anonymise": "on"}, follow_redirects=False)
@@ -146,17 +146,17 @@ def test_an_employer_cannot_open_another_companys_candidate(stub_llm):
 def test_an_employer_cannot_lift_the_blind_with_a_query_string(stub_llm):
     """Identity is released by the agency, not by editing a URL."""
     employer = signed_in("hiring@fintrail.example")
-    post_role(employer, "Blind Test Role", min_years=2, must_have_skills="Kubernetes")
-    apply_as("Arjun Menon", years_experience=9)
+    post_role(employer, "Blind Test Role", min_years=2, must_have_skills="Controllership")
+    apply_as("Meera Ramanathan", years_experience=9)
     signed_in(ADMIN_EMAIL).post("/roles/match", data={"anonymise": "on"}, follow_redirects=False)
 
     dossier_id = list(RUNS.values())[-1].assessed_pairs[0].dossier_id
     body = employer.get("/dossier/{}?blind=0".format(dossier_id), headers=HTML).text.lower()
-    assert "arjun" not in body and "menon" not in body
+    assert "meera" not in body and "ramanathan" not in body
 
     # The agency can.
     admin_body = signed_in(ADMIN_EMAIL).get("/dossier/{}?blind=0".format(dossier_id), headers=HTML).text
-    assert "Arjun" in admin_body
+    assert "Meera" in admin_body
 
 
 # ==========================================================================
@@ -176,8 +176,8 @@ def test_a_dossier_url_is_useless_without_a_session(stub_llm):
     """Regression: these routes had no guard, so a URL alone exposed a
     candidate's name, email, phone, salary and full CV text."""
     employer = signed_in("hiring@fintrail.example")
-    post_role(employer, "Leak Test", min_years=2, must_have_skills="Kubernetes")
-    apply_as("Arjun Menon", years_experience=9)
+    post_role(employer, "Leak Test", min_years=2, must_have_skills="Controllership")
+    apply_as("Meera Ramanathan", years_experience=9)
     signed_in(ADMIN_EMAIL).post("/roles/match", data={"anonymise": "on"}, follow_redirects=False)
     dossier_id = list(RUNS.values())[-1].assessed_pairs[0].dossier_id
 
@@ -185,12 +185,12 @@ def test_a_dossier_url_is_useless_without_a_session(stub_llm):
     for suffix in ["", "?blind=0", "/embed", "/embed?blind=0", "/pdf", "/pdf?blind=0"]:
         r = anon.get("/dossier/{}{}".format(dossier_id, suffix), headers=HTML, follow_redirects=False)
         assert r.status_code == 303, suffix
-        assert "arjun" not in r.text.lower(), suffix
+        assert "meera" not in r.text.lower(), suffix
 
 
 def test_status_endpoints_do_not_leak_candidate_names(stub_llm):
     post_role(signed_in("hiring@fintrail.example"), "Status Test", min_years=2,
-              must_have_skills="Kubernetes")
+              must_have_skills="Controllership")
     apply_as("Priya Raghavan", years_experience=9)
     signed_in(ADMIN_EMAIL).post("/roles/match", data={"anonymise": "on"}, follow_redirects=False)
     run_id = list(RUNS.keys())[-1]
@@ -244,7 +244,7 @@ def test_a_brand_new_employer_sees_an_empty_state_not_an_error():
 def test_unicode_survives_the_whole_journey(stub_llm):
     employer = signed_in("jobs@qadira.example")
     post_role(employer, "Ingénieur ML — Sénior", location="Dubaï",
-              min_years=2, must_have_skills="Kubernetes")
+              min_years=2, must_have_skills="Controllership")
     apply_as("Zoë Müller-Nakamura", years_experience=9)
     signed_in(ADMIN_EMAIL).post("/roles/match", data={"anonymise": "on"}, follow_redirects=False)
 

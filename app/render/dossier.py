@@ -30,7 +30,8 @@ TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 # Flag kinds produced by app/analysis.py rather than by the model. Tagged in
 # the output so the reader knows which numbers are arithmetic.
-COMPUTED_KINDS = {"employment_gap", "short_tenure", "title_inflation", "logistics"}
+COMPUTED_KINDS = {"employment_gap", "career_break", "short_tenure",
+                  "title_inflation", "logistics"}
 
 _CATEGORY_LABELS = OrderedDict(
     [

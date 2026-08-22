@@ -32,20 +32,20 @@ def brief(title, reqs, years=None, kind="must_have"):
     )
 
 
-ML_ROLE = brief("ML Platform Engineer", [
-    "Real-time inference serving at low latency",
-    "Kubernetes and Kubeflow",
-    "PyTorch model training",
+ML_ROLE = brief("Head of Finance", [
+    "Ind AS 109 expected credit loss provisioning",
+    "Month-end close and controllership",
+    "Rolling cash forecast and annual operating plan",
 ], 6)
 FRONTEND_ROLE = brief("Frontend Engineer", [
     "React and TypeScript",
     "CSS and design systems",
     "Web accessibility WCAG",
 ], 4)
-FINANCE_ROLE = brief("VP Finance", [
-    "Qualified chartered accountant",
-    "IFRS and Ind AS reporting",
-    "Treasury and capital markets",
+FINANCE_ROLE = brief("Frontend Lead", [
+    "React component architecture",
+    "CSS design systems",
+    "Browser rendering performance",
 ], 12)
 
 
@@ -83,8 +83,8 @@ def test_unrelated_role_covers_nothing(cand):
 def test_corpus_includes_achievements_not_just_the_skills_list(cand):
     p, _ = cand
     corpus = candidate_corpus(p)
-    assert "torchserve" in corpus          # only appears inside an achievement
-    assert "fraud scoring" in corpus       # bigram from an achievement
+    assert "netsuite" in corpus            # only appears inside an achievement
+    assert "monthly close" in corpus       # bigram from an achievement
 
 
 def test_one_generic_word_in_common_is_not_a_match():
@@ -110,7 +110,7 @@ def test_two_matching_terms_do_count_as_a_match():
 def test_experience_is_a_modifier_not_a_gate(cand):
     """An impossible years requirement must not zero out a strong candidate."""
     p, t = cand
-    impossible = brief("R", ["Real-time inference serving at low latency"], years=40)
+    impossible = brief("R", ["Ind AS 109 expected credit loss provisioning"], years=40)
     a = score_affinity(p, t, impossible)
     assert a.term_ratio == 1.0
     assert a.score > 0.7
@@ -118,7 +118,7 @@ def test_experience_is_a_modifier_not_a_gate(cand):
 
 def test_nice_to_haves_are_used_when_there_are_no_must_haves(cand):
     p, t = cand
-    a = score_affinity(p, t, brief("R", ["Kubernetes and Kubeflow"], kind="nice_to_have"))
+    a = score_affinity(p, t, brief("R", ["Month-end close and controllership"], kind="nice_to_have"))
     assert a.term_ratio == 1.0
 
 
@@ -247,7 +247,7 @@ def stub_llm(monkeypatch, tmp_path):
         if "BROKEN" in jd_text:
             raise ValueError("unparseable brief")
         title = jd_text.strip().splitlines()[0][:40]
-        return brief(title, ["Kubernetes and Kubeflow", "PyTorch model training"], 5)
+        return brief(title, ["Month-end close and controllership", "Ind AS 109 provisioning"], 5)
 
     def fake_profile(text, usage=None, model=None):
         calls["profile"] += 1
@@ -288,7 +288,7 @@ CV_BODY = "Jane Doe\nSenior ML Engineer\nBuilt PyTorch models on Kubeflow and Ku
 
 
 def test_full_run_produces_dossiers(tmp_path, stub_llm):
-    jds = [("role_a.txt", "Platform Lead\nNeed Kubernetes"), ("role_b.txt", "ML Engineer\nNeed PyTorch")]
+    jds = [("role_a.txt", "Platform Lead\nNeed controllership"), ("role_b.txt", "ML Engineer\nNeed Ind AS 109")]
     cvs = write_cvs(tmp_path, [("a.txt", CV_BODY), ("b.txt", CV_BODY)])
     run, store = run_match(tmp_path, jds, cvs)
 
@@ -300,7 +300,7 @@ def test_full_run_produces_dossiers(tmp_path, stub_llm):
 
 
 def test_each_cv_is_extracted_once_regardless_of_role_count(tmp_path, stub_llm):
-    jds = [("r{}.txt".format(i), "Role {}\nNeed Kubernetes".format(i)) for i in range(4)]
+    jds = [("r{}.txt".format(i), "Role {}\nNeed controllership".format(i)) for i in range(4)]
     cvs = write_cvs(tmp_path, [("a.txt", CV_BODY)])
     run_match(tmp_path, jds, cvs)
     assert stub_llm["profile"] == 1
@@ -308,7 +308,7 @@ def test_each_cv_is_extracted_once_regardless_of_role_count(tmp_path, stub_llm):
 
 
 def test_a_broken_brief_fails_only_its_own_column(tmp_path, stub_llm):
-    jds = [("good.txt", "Good Role\nNeed Kubernetes"), ("bad.txt", "BROKEN")]
+    jds = [("good.txt", "Good Role\nNeed controllership"), ("bad.txt", "BROKEN")]
     cvs = write_cvs(tmp_path, [("a.txt", CV_BODY)])
     run, _ = run_match(tmp_path, jds, cvs)
 
@@ -319,7 +319,7 @@ def test_a_broken_brief_fails_only_its_own_column(tmp_path, stub_llm):
 
 
 def test_a_broken_cv_fails_only_its_own_row(tmp_path, stub_llm):
-    jds = [("r.txt", "Role\nNeed Kubernetes")]
+    jds = [("r.txt", "Role\nNeed controllership")]
     cvs = write_cvs(tmp_path, [("good.txt", CV_BODY), ("bad.txt", "BADCV")])
     run, _ = run_match(tmp_path, jds, cvs)
 
@@ -329,7 +329,7 @@ def test_a_broken_cv_fails_only_its_own_row(tmp_path, stub_llm):
 
 
 def test_an_empty_cv_file_fails_before_any_model_call(tmp_path, stub_llm):
-    jds = [("r.txt", "Role\nNeed Kubernetes")]
+    jds = [("r.txt", "Role\nNeed controllership")]
     cvs = write_cvs(tmp_path, [("empty.txt", "   ")])
     run, _ = run_match(tmp_path, jds, cvs)
     assert not run.candidates[0].ok
@@ -337,7 +337,7 @@ def test_an_empty_cv_file_fails_before_any_model_call(tmp_path, stub_llm):
 
 
 def test_one_failing_assessment_does_not_stop_the_others(tmp_path, stub_llm):
-    jds = [("r.txt", "Role\nNeed Kubernetes")]
+    jds = [("r.txt", "Role\nNeed controllership")]
     cvs = write_cvs(tmp_path, [("ok.txt", CV_BODY), ("bad.txt", CV_BODY + "\nFAILASSESS")])
     run, _ = run_match(tmp_path, jds, cvs)
     assert len(run.assessed_pairs) == 1
@@ -354,7 +354,7 @@ def test_run_always_terminates_even_on_an_unexpected_crash(tmp_path, monkeypatch
 
 
 def test_shortlist_and_role_tags_are_consistent(tmp_path, stub_llm):
-    jds = [("a.txt", "Alpha Role\nNeed Kubernetes"), ("b.txt", "Beta Role\nNeed PyTorch")]
+    jds = [("a.txt", "Alpha Role\nNeed controllership"), ("b.txt", "Beta Role\nNeed Ind AS 109")]
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY), ("y.txt", CV_BODY)])
     run, _ = run_match(tmp_path, jds, cvs)
 
@@ -366,8 +366,8 @@ def test_shortlist_and_role_tags_are_consistent(tmp_path, stub_llm):
 
 
 def test_assessed_pairs_outrank_screened_only_ones(tmp_path, stub_llm):
-    jds = [("a.txt", "Alpha\nNeed Kubernetes"), ("b.txt", "Beta\nNeed PyTorch"),
-           ("c.txt", "Gamma\nNeed PyTorch")]
+    jds = [("a.txt", "Alpha\nNeed controllership"), ("b.txt", "Beta\nNeed Ind AS 109"),
+           ("c.txt", "Gamma\nNeed Ind AS 109")]
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
     run, _ = run_match(tmp_path, jds, cvs, top_roles=1)
     tags = run.roles_for(0)
@@ -377,7 +377,7 @@ def test_assessed_pairs_outrank_screened_only_ones(tmp_path, stub_llm):
 
 
 def test_cost_reporting_reflects_the_actual_run(tmp_path, stub_llm):
-    jds = [("a.txt", "Alpha\nNeed Kubernetes"), ("b.txt", "Beta\nNeed PyTorch")]
+    jds = [("a.txt", "Alpha\nNeed controllership"), ("b.txt", "Beta\nNeed Ind AS 109")]
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY), ("y.txt", CV_BODY)])
     run, _ = run_match(tmp_path, jds, cvs)
     cost = run.cost()
@@ -389,7 +389,7 @@ def test_cost_reporting_reflects_the_actual_run(tmp_path, stub_llm):
 def test_status_payload_is_serialisable_at_every_stage(tmp_path, stub_llm):
     import json
     from app.matchrun import create_run, execute, status_payload
-    jds = [("a.txt", "Alpha\nNeed Kubernetes")]
+    jds = [("a.txt", "Alpha\nNeed controllership")]
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
     run = create_run(jds=jds, cvs=cvs, model="stub", anonymise=True)
     json.dumps(status_payload(run))          # queued
@@ -432,7 +432,7 @@ def test_brief_comes_first_in_the_assessment_prompt(monkeypatch):
 def test_assessments_are_grouped_by_role(tmp_path, stub_llm):
     """Grouping is what makes the cached brief prefix actually hit."""
     from app.matchrun import create_run
-    jds = [("a.txt", "Alpha\nNeed Kubernetes"), ("b.txt", "Beta\nNeed PyTorch")]
+    jds = [("a.txt", "Alpha\nNeed controllership"), ("b.txt", "Beta\nNeed Ind AS 109")]
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY), ("y.txt", CV_BODY)])
     run, _ = run_match(tmp_path, jds, cvs)
     order = [p.requisition_index for p in sorted(run.selected_pairs, key=lambda p: p.requisition_index)]
@@ -443,7 +443,8 @@ def test_extraction_can_use_a_cheaper_model_than_assessment(tmp_path, monkeypatc
     from app import matchrun
     used = []
     monkeypatch.setattr(matchrun.llm, "extract_job_brief",
-                        lambda t, usage=None, model=None: brief("R", ["Kubernetes and Kubeflow"], 5))
+                        lambda t, usage=None, model=None: brief(
+                            "R", ["Month-end close and controllership"], 5))
     monkeypatch.setattr(matchrun.llm, "extract_profile",
                         lambda t, usage=None, model=None: (used.append(("extract", model)), sample_profile())[1])
     monkeypatch.setattr(matchrun.llm, "assess",
@@ -468,7 +469,7 @@ def test_blocked_pairs_never_reach_the_model(tmp_path, stub_llm):
     from app.intake import CandidatePreferences, RoleConstraints
     from app.matchrun import create_run, execute
 
-    jds = [("cheap.txt", "Cheap Role\nNeed Kubernetes")]
+    jds = [("cheap.txt", "Cheap Role\nNeed controllership")]
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
     run = create_run(jds=jds, cvs=cvs, model="stub", anonymise=True)
     # Candidate will not go below 90 LPA; the role tops out at 40.
@@ -486,7 +487,7 @@ def test_a_blocked_pair_explains_itself_with_numbers(tmp_path, stub_llm):
     from app.matchrun import create_run, execute
 
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
-    run = create_run(jds=[("r.txt", "Role\nNeed Kubernetes")], cvs=cvs, model="stub", anonymise=True)
+    run = create_run(jds=[("r.txt", "Role\nNeed controllership")], cvs=cvs, model="stub", anonymise=True)
     run.candidates[0].prefs = CandidatePreferences(notice_period_days=180)
     run.requisitions[0].constraints = RoleConstraints(role_title="R", max_notice_days=30)
     execute(run.id, {})
@@ -501,7 +502,7 @@ def test_unblocked_pairs_are_unaffected_by_the_gate(tmp_path, stub_llm):
     from app.matchrun import create_run, execute
 
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
-    run = create_run(jds=[("r.txt", "Role\nNeed Kubernetes")], cvs=cvs, model="stub", anonymise=True)
+    run = create_run(jds=[("r.txt", "Role\nNeed controllership")], cvs=cvs, model="stub", anonymise=True)
     run.candidates[0].prefs = CandidatePreferences(min_acceptable_ctc_lpa=30)
     run.requisitions[0].constraints = RoleConstraints(role_title="R", ctc_max_lpa=60)
     execute(run.id, {})
@@ -515,7 +516,7 @@ def test_the_gate_only_applies_where_constraints_were_declared(tmp_path, stub_ll
     from app.matchrun import create_run, execute
 
     cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
-    run = create_run(jds=[("r.txt", "Role\nNeed Kubernetes")], cvs=cvs, model="stub", anonymise=True)
+    run = create_run(jds=[("r.txt", "Role\nNeed controllership")], cvs=cvs, model="stub", anonymise=True)
     execute(run.id, {})
     assert not run.blocked_pairs
     assert stub_llm["assess"] >= 1
@@ -527,8 +528,8 @@ def test_gate_scales_the_saving_across_a_grid(tmp_path, stub_llm):
     from app.matchrun import create_run, execute
 
     cvs = write_cvs(tmp_path, [("a.txt", CV_BODY), ("b.txt", CV_BODY), ("c.txt", CV_BODY)])
-    run = create_run(jds=[("rich.txt", "Rich Role\nNeed Kubernetes"),
-                          ("poor.txt", "Poor Role\nNeed PyTorch")],
+    run = create_run(jds=[("rich.txt", "Rich Role\nNeed controllership"),
+                          ("poor.txt", "Poor Role\nNeed Ind AS 109")],
                      cvs=cvs, model="stub", anonymise=True, top_roles=2)
     for c in run.candidates:
         c.prefs = CandidatePreferences(min_acceptable_ctc_lpa=80)

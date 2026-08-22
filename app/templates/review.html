@@ -218,6 +218,8 @@
       <div class="sub">
         {% if exp.required %}{{ exp.required | int }}y required{% if exp.shortfall %} · {{ exp.shortfall }}y short{% endif %}
         {% else %}No minimum stated in the brief{% endif %}
+        {% if exp.months_out %}<br>{{ exp.span }}y since {{ dossier.timeline.career_start.strftime('%Y') }},
+        including a {{ exp.months_out }}-month break{% endif %}
       </div>
       <div class="bar"><i class="{{ 'ok' if exp.verdict == 'meets' else ('warn' if exp.verdict == 'close' else 'bad') }}" data-w="{{ (exp.ratio * 100) | round | int }}"></i></div>
     </div>
@@ -307,7 +309,14 @@
       <div class="card-body">
         <div class="expwrap">
           <div>
-            <div class="expnum"><b class="num">{{ exp.actual }}</b><span>years of experience</span></div>
+            <div class="expnum"><b class="num">{{ exp.actual }}</b><span>years worked</span></div>
+            {% if exp.months_out %}
+            <p class="hint" style="margin:6px 0 0;">
+              {{ exp.span }} years since {{ dossier.timeline.career_start.strftime('%B %Y') }}, including a
+              {{ exp.months_out }}-month break. Measured against the calendar, not billed months —
+              time out of work is not a shortfall in seniority.
+            </p>
+            {% endif %}
             <div class="scale">
               <div class="bar" style="height:9px;">
                 <i class="{{ 'ok' if exp.verdict == 'meets' else ('warn' if exp.verdict == 'close' else 'bad') }}" data-w="{{ (exp.ratio * 100) | round | int }}"></i>

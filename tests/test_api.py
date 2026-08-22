@@ -80,8 +80,8 @@ def test_demo_creates_a_report(client, demo_id):
 def test_blind_and_named_views(client, demo_id):
     blind = client.get("/dossier/{}?blind=1".format(demo_id), headers=HTML).text.lower()
     named = client.get("/dossier/{}?blind=0".format(demo_id), headers=HTML).text.lower()
-    assert "arjun" not in blind and "menon" not in blind
-    assert "arjun" in named
+    assert "meera" not in blind and "ramanathan" not in blind
+    assert "meera" in named
 
 
 def test_embed_renders_the_document(client, demo_id):

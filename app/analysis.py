@@ -89,6 +89,24 @@ class TimelineAnalysis:
         return round(self.total_experience_months / 12, 1)
 
     @property
+    def career_span_years(self) -> float:
+        """Calendar time from first role to last, breaks included.
+
+        Reported alongside experience because the two diverge exactly when
+        someone has taken time out, and showing only the smaller number
+        quietly penalises them for it. A brief asking for "15+ years" is
+        usually reaching for seniority, not for 180 billed months.
+        """
+        if not self.intervals:
+            return 0.0
+        last = max(i.end for i in self.intervals)
+        return round(_months_between(self.intervals[0].start, last) / 12, 1)
+
+    @property
+    def months_out_of_work(self) -> int:
+        return sum(months for _, _, months in self.gaps)
+
+    @property
     def average_tenure_years(self) -> float:
         return round(self.average_tenure_months / 12, 1)
 
@@ -143,8 +161,76 @@ def build_timeline(profile: CandidateProfile, today: Optional[date] = None) -> T
 def _fmt(d: date) -> str:
     return d.strftime("%b %Y")
 
+# Words a candidate uses when they have already accounted for time out of work.
+# Their presence changes the wording from "not explained" to "explained", and
+# nothing else -- the tool never guesses a reason that was not written down.
+_BREAK_EXPLAINED = (
+    "career break", "sabbatical", "maternity", "paternity", "parental leave",
+    "caregiving", "caring for", "family illness", "health", "medical",
+    "relocation", "relocated", "full-time study", "further study", "mba",
+    "travel", "started a business", "founded", "personal reasons",
+)
 
-def derive_risk_flags(profile: CandidateProfile, timeline: TimelineAnalysis) -> List[RiskFlag]:
+# Under a year reads as a job search or a notice period. A year or more is a
+# deliberate break, and a different conversation.
+CAREER_BREAK_MONTHS = 12
+
+
+def _explained_in(cv_text: str) -> bool:
+    lowered = (cv_text or "").lower()
+    return any(term in lowered for term in _BREAK_EXPLAINED)
+
+
+def _time_out_of_work(timeline: TimelineAnalysis, cv_text: str = "") -> List[RiskFlag]:
+    """Report time between roles as context, never as a defect.
+
+    Stellaspire places people returning to work. A tool that stamps an
+    employment gap MEDIUM RISK is arguing against the firm using it -- and
+    against a candidate for something that is not evidence of anything. So a
+    break is reported at low severity, described neutrally, and framed as a
+    question for the screening call rather than a mark against the person.
+
+    The arithmetic is unchanged: the dates are still computed and still shown.
+    Only the interpretation is different, and the interpretation was never the
+    part the numbers justified.
+    """
+    flags: List[RiskFlag] = []
+    explained = _explained_in(cv_text)
+
+    for start, end, months in timeline.gaps:
+        dates = _fmt(start) + " to " + _fmt(end)
+        evidence = "Previous role ended " + _fmt(start) + "; next role began " + _fmt(end) + "."
+
+        if months >= CAREER_BREAK_MONTHS:
+            if explained:
+                summary = (
+                    str(months) + "-month career break (" + dates + "). The CV accounts for "
+                    "this period. Nothing here needs explaining away."
+                )
+            else:
+                summary = (
+                    str(months) + "-month career break (" + dates + "), not described on the CV. "
+                    "Caregiving, health, study and relocation are all common. Worth asking about "
+                    "on the call; not worth assuming."
+                )
+            flags.append(RiskFlag(kind="career_break", severity="low",
+                                  summary=summary, evidence=evidence))
+        else:
+            flags.append(RiskFlag(
+                kind="employment_gap", severity="low",
+                summary=(
+                    str(months) + " months between roles (" + dates + "). Normal for a senior "
+                    "search with a notice period; noted for completeness."
+                ),
+                evidence=evidence,
+            ))
+
+    return flags
+
+
+
+def derive_risk_flags(profile: CandidateProfile, timeline: TimelineAnalysis,
+                      cv_text: str = "") -> List[RiskFlag]:
     """Risk flags that follow from arithmetic alone.
 
     The LLM produces a separate set of judgement-based flags; the two lists are
@@ -153,19 +239,7 @@ def derive_risk_flags(profile: CandidateProfile, timeline: TimelineAnalysis) -> 
     """
     flags: List[RiskFlag] = []
 
-    for start, end, months in timeline.gaps:
-        severity = "high" if months >= 12 else "medium" if months >= 7 else "low"
-        flags.append(
-            RiskFlag(
-                kind="employment_gap",
-                severity=severity,
-                summary=(
-                    str(months) + "-month gap between roles (" + _fmt(start) + " to " + _fmt(end) + "). "
-                    "Not explained on the CV."
-                ),
-                evidence="Previous role ended " + _fmt(start) + "; next role began " + _fmt(end) + ".",
-            )
-        )
+    flags.extend(_time_out_of_work(timeline, cv_text))
 
     if len(timeline.short_tenures) >= 2:
         detail = "; ".join(p.title + " at " + p.company + " (" + str(m) + " months)" for p, m in timeline.short_tenures[:3])

@@ -96,17 +96,30 @@ class Dossier:
         """Candidate years against the years the brief asks for."""
         required = self.brief.stated_min_years
         actual = self.timeline.total_experience_years
+        span = self.timeline.career_span_years
+        out = self.timeline.months_out_of_work
+        base = {"required": None, "actual": actual, "span": span, "months_out": out,
+                "ratio": 1.0, "verdict": "not specified", "shortfall": 0.0}
         if not required:
-            return {"required": None, "actual": actual, "ratio": 1.0, "verdict": "not specified", "shortfall": 0.0}
-        ratio = min(actual / required, 1.0) if required else 1.0
-        shortfall = round(max(required - actual, 0.0), 1)
-        if actual >= required:
+            return base
+
+        # Measured against the calendar, not against billed months. Someone who
+        # took eighteen months out is not eighteen months less senior, and a
+        # brief asking for "15+ years" is reaching for seniority. The worked
+        # experience figure is still shown next to it, so nothing is hidden.
+        effective = max(actual, span) if out else actual
+
+        ratio = min(effective / required, 1.0)
+        shortfall = round(max(required - effective, 0.0), 1)
+        if effective >= required:
             verdict = "meets"
         elif ratio >= 0.8:
             verdict = "close"
         else:
             verdict = "short"
-        return {"required": required, "actual": actual, "ratio": ratio, "verdict": verdict, "shortfall": shortfall}
+        base.update({"required": required, "ratio": ratio, "verdict": verdict,
+                     "shortfall": shortfall, "effective": effective})
+        return base
 
     @property
     def skill_stats(self) -> dict:
@@ -205,7 +218,7 @@ def build_dossier(
 
     # 3 + 4. arithmetic
     timeline = build_timeline(profile)
-    computed_flags = derive_risk_flags(profile, timeline)
+    computed_flags = derive_risk_flags(profile, timeline, document.text)
 
     # 5. client brief -- reused when a batch already parsed it
     if brief is None:

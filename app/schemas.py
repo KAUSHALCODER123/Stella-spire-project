@@ -131,6 +131,7 @@ class RequirementMatch(BaseModel):
 class RiskFlag(BaseModel):
     kind: Literal[
         "employment_gap",
+        "career_break",
         "short_tenure",
         "title_inflation",
         "claim_without_evidence",

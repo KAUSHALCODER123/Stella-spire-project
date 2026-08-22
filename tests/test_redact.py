@@ -1,7 +1,7 @@
 """Tests for blind-profile redaction.
 
 Regression origin: the first rendered dossier was headed "Candidate SD-84923C
-- Blind profile" and opened with "Arjun Menon is an ML platform engineer".
+- Blind profile" and opened with "Meera Ramanathan is an ML platform engineer".
 Blanking the name field is not anonymisation; the generated prose has to be
 cleaned too.
 """
@@ -14,33 +14,33 @@ from app.render.dossier import render_html
 from app.render.redact import redact_text
 from tests.fixtures import sample_dossier
 
-KW = {"full_name": "Arjun Menon", "email": "arjun.menon.ml@gmail.com", "phone": "+91 98450 22417"}
+KW = {"full_name": "Meera Ramanathan", "email": "meera.ramanathan.fin@gmail.com", "phone": "+91 98860 41277"}
 
 
 def test_full_name_is_removed():
-    assert "Arjun" not in redact_text("Arjun Menon is an ML platform engineer.", **KW)
+    assert "Meera" not in redact_text("Meera Ramanathan is an ML platform engineer.", **KW)
 
 
 def test_first_name_alone_is_removed():
-    assert "Arjun" not in redact_text("On the call, Arjun explained the migration.", **KW)
+    assert "Meera" not in redact_text("On the call, Meera explained the migration.", **KW)
 
 
 def test_surname_alone_is_removed():
-    assert "Menon" not in redact_text("Menon owns the AI roadmap.", **KW)
+    assert "Ramanathan" not in redact_text("Ramanathan owns the AI roadmap.", **KW)
 
 
 def test_redaction_is_case_insensitive():
-    assert "ARJUN" not in redact_text("ARJUN MENON", **KW).upper().replace("[CANDIDATE]", "")
+    assert "ARJUN" not in redact_text("MEERA RAMANATHAN", **KW).upper().replace("[CANDIDATE]", "")
 
 
 def test_full_name_replaced_before_parts():
-    """'Arjun Menon' must become one placeholder, not two."""
-    assert redact_text("Arjun Menon led it.", **KW) == "[candidate] led it."
+    """'Meera Ramanathan' must become one placeholder, not two."""
+    assert redact_text("Meera Ramanathan led it.", **KW) == "[candidate] led it."
 
 
 def test_email_and_phone_are_removed():
-    out = redact_text("Reach him at arjun.menon.ml@gmail.com or +91 98450 22417.", **KW)
-    assert "@gmail" not in out and "98450" not in out
+    out = redact_text("Reach him at meera.ramanathan.fin@gmail.com or +91 98860 41277.", **KW)
+    assert "@gmail" not in out and "98860" not in out
 
 
 def test_unrelated_emails_are_also_caught():
@@ -49,7 +49,7 @@ def test_unrelated_emails_are_also_caught():
 
 
 def test_linkedin_urls_are_removed():
-    out = redact_text("Profile: linkedin.com/in/arjunmenon-ml", **KW)
+    out = redact_text("Profile: linkedin.com/in/meeraramanathan-finance", **KW)
     assert "linkedin.com" not in out
 
 
@@ -60,9 +60,9 @@ def test_short_and_common_name_parts_are_not_redacted():
 
 
 def test_substrings_of_other_words_survive():
-    """'Menon' must not be stripped out of an unrelated longer token."""
-    out = redact_text("The Menonite dataset was used.", **KW)
-    assert "Menonite" in out
+    """'Ramanathan' must not be stripped out of an unrelated longer token."""
+    out = redact_text("The Ramanathanite dataset was used.", **KW)
+    assert "Ramanathanite" in out
 
 
 def test_none_and_empty_are_passthrough():
@@ -71,7 +71,7 @@ def test_none_and_empty_are_passthrough():
 
 
 def test_no_name_configured_leaves_names_alone():
-    assert redact_text("Arjun Menon", full_name=None) == "Arjun Menon"
+    assert redact_text("Meera Ramanathan", full_name=None) == "Meera Ramanathan"
 
 
 # --- whole-document guarantee --------------------------------------------
@@ -79,29 +79,29 @@ def test_no_name_configured_leaves_names_alone():
 
 def test_rendered_blind_dossier_contains_no_identifiers():
     html = render_html(sample_dossier(), anonymise=True).lower()
-    for identifier in ("arjun", "menon", "arjun.menon.ml@gmail.com", "98450", "linkedin.com/in/arjunmenon"):
+    for identifier in ("meera", "ramanathan", "meera.ramanathan.fin@gmail.com", "98860", "linkedin.com/in/meeraramanathan"):
         assert identifier not in html, "blind dossier leaked {!r}".format(identifier)
 
 
 def test_identified_dossier_still_shows_the_name():
     html = render_html(sample_dossier(), anonymise=False)
-    assert "Arjun Menon" in html
+    assert "Meera Ramanathan" in html
 
 
 def test_redaction_does_not_mutate_the_caller_s_dossier():
     """build_context deep-copies; the recruiter's own view must stay intact."""
     dossier = sample_dossier()
     render_html(dossier, anonymise=True)
-    assert dossier.profile.full_name == "Arjun Menon"
-    assert "Arjun Menon" in dossier.assessment.executive_summary
+    assert dossier.profile.full_name == "Meera Ramanathan"
+    assert "Meera Ramanathan" in dossier.assessment.executive_summary
 
 
 def test_blind_dossier_keeps_the_substance():
     """Redaction must not gut the assessment."""
     html = render_html(sample_dossier(), anonymise=True)
-    assert "4,200 requests per second" in html
-    assert "Generative AI" in html
-    assert "67%" in html
+    assert "19 working days to 6" in html
+    assert "Ind AS 109" in html
+    assert "Series C" in html
 
 
 # --- blind mode must redact the source pane too ---------------------------
@@ -124,9 +124,9 @@ def test_blind_source_pane_is_redacted_and_still_traceable():
 
     html = render_source(d.document.text, d.verification)
     # Case-insensitive: the CV header is upper-case, and a case-sensitive
-    # check let "ARJUN MENON" through once already.
+    # check let "MEERA RAMANATHAN" through once already.
     lowered = html.lower()
-    for identifier in ("arjun", "menon", "arjun.menon.ml@gmail.com", "98450"):
+    for identifier in ("meera", "ramanathan", "meera.ramanathan.fin@gmail.com", "98860"):
         assert identifier not in lowered, "blind source pane leaked {!r}".format(identifier)
 
     # Redaction must not destroy traceability.
@@ -139,16 +139,16 @@ def test_identified_source_pane_keeps_the_name():
 
     d = sample_dossier()
     html = render_source(d.document.text, d.verification)
-    assert "ARJUN MENON" in html
+    assert "MEERA RAMANATHAN" in html
 
 
 # --- ordering: contacts before names --------------------------------------
 
 
 def test_email_is_redacted_whole_not_shredded_by_the_name():
-    """Regression: arjun.menon.ml@gmail.com contains the candidate's name, so
+    """Regression: meera.ramanathan.fin@gmail.com contains the candidate's name, so
     redacting names first produced '[candidate].[candidate].[email]'."""
-    out = redact_text("Reach them at arjun.menon.ml@gmail.com today", **KW)
+    out = redact_text("Reach them at meera.ramanathan.fin@gmail.com today", **KW)
     assert "[email]" in out
     assert "the candidate." not in out
     assert "[candidate]." not in out
@@ -156,7 +156,7 @@ def test_email_is_redacted_whole_not_shredded_by_the_name():
 
 
 def test_contact_line_redacts_cleanly():
-    line = "Bengaluru, Karnataka | arjun.menon.ml@gmail.com | +91 98450 22417"
+    line = "Bengaluru, Karnataka | meera.ramanathan.fin@gmail.com | +91 98860 41277"
     out = redact_text(line, **KW)
     assert out == "Bengaluru, Karnataka | [email] | [phone]"
 
@@ -170,21 +170,21 @@ def test_third_party_email_containing_no_name_still_redacted():
 
 
 def test_placeholder_is_capitalised_at_the_start_of_a_sentence():
-    out = redact_text("Arjun Menon is an ML engineer.", replacement="the candidate", **KW)
+    out = redact_text("Meera Ramanathan is an ML engineer.", replacement="the candidate", **KW)
     assert out.startswith("The candidate is"), out
 
 
 def test_placeholder_capitalised_after_a_full_stop():
-    out = redact_text("We met. Arjun Menon leads the team.", replacement="the candidate", **KW)
+    out = redact_text("We met. Meera Ramanathan leads the team.", replacement="the candidate", **KW)
     assert "We met. The candidate leads" in out, out
 
 
 def test_placeholder_stays_lowercase_mid_sentence():
-    out = redact_text("The report on Arjun Menon is ready.", replacement="the candidate", **KW)
+    out = redact_text("The report on Meera Ramanathan is ready.", replacement="the candidate", **KW)
     assert "on the candidate is ready" in out, out
 
 
 def test_bracket_placeholder_is_left_alone():
     """'[candidate]' is a redaction marker, not prose; do not case-fix it."""
-    out = redact_text("Arjun Menon is here.", replacement="[candidate]", **KW)
+    out = redact_text("Meera Ramanathan is here.", replacement="[candidate]", **KW)
     assert out.startswith("[candidate]")

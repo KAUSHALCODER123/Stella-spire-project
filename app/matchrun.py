@@ -309,7 +309,7 @@ def _execute(run: MatchRun, store: Dict[str, Dossier]) -> None:
             cand.profile = llm.extract_profile(
                 doc.text, usage=run.usage, model=run.extraction_model or run.model)
             cand.timeline = build_timeline(cand.profile)
-            cand.computed_flags = derive_risk_flags(cand.profile, cand.timeline)
+            cand.computed_flags = derive_risk_flags(cand.profile, cand.timeline, doc.text)
         except Exception as exc:  # noqa: BLE001
             log.error("run %s: cv %s failed: %s", run.id, cand.filename, exc)
             cand.error = str(exc)

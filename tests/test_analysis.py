@@ -243,7 +243,7 @@ def test_flags_sort_high_severity_first():
 
 
 def test_sample_profile_produces_the_expected_flags():
-    """Mirrors data/samples/cv_arjun_menon.txt, hand-transcribed.
+    """Mirrors data/samples/cv_meera_ramanathan.txt, hand-transcribed.
 
     If the extraction pass is working, the real pipeline should reach the same
     conclusions this test asserts.
