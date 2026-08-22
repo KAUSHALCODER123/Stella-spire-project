@@ -1,0 +1,44 @@
+# Render blueprint. Commit this and point Render at the repo.
+services:
+  - type: web
+    name: spiredossier
+    runtime: docker
+    plan: starter          # free tier sleeps, and a cold start loses in-memory
+                           # batches and match runs mid-flight
+    region: singapore      # closest to Bengaluru of Render's regions
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # MUST be set. Sessions are signed with this; without it each process
+      # invents its own and every sign-in is rejected after a restart.
+      - key: SESSION_SECRET
+        generateValue: true
+
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        sync: false
+      - key: MODEL
+        sync: false
+      - key: EXTRACTION_MODEL
+        sync: false
+
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_BUCKET_RESUMES
+        value: resumes
+      - key: SUPABASE_BUCKET_JDS
+        value: jds
+
+      - key: AGENCY_NAME
+        value: Stellaspire
+      - key: AGENCY_ACCENT
+        value: "#2C3A8C"
+      - key: AGENCY_ACCENT_SOFT
+        value: "#DFE3FA"
+
+      # Seed the demo board on a fresh database. Set to 0 once real data exists.
+      - key: SEED_DEMO_DATA
+        value: "1"

@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     # Agency branding, applied to every generated dossier.
     agency_name: str = "Stellaspire"
     agency_tagline: str = "We take hiring personally."
-    agency_accent: str = "#1F3A5F"
-    agency_accent_soft: str = "#E8EDF4"
+    agency_accent: str = "#2C3A8C"
+    agency_accent_soft: str = "#DFE3FA"
 
     # When true, candidate contact details are stripped from the rendered PDF
     # so the client evaluates the profile blind.
