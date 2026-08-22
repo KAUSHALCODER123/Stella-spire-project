@@ -27,7 +27,7 @@ from app.batch import BATCHES, create_batch, run_batch, status_payload
 from app.config import MODEL_CHOICES, settings
 from app.extract.documents import SUPPORTED_SUFFIXES
 from app.pipeline import Dossier, build_dossier
-from app.render.dossier import COMPUTED_KINDS, candidate_ref, render_html, render_pdf
+from app.render.dossier import COMPUTED_KINDS, _skills_by_category, candidate_ref, render_html, render_pdf
 from app.render.source import render_source
 from app.render.redact import redact_dossier, redact_text
 from app.verify import verify_assessment
@@ -52,6 +52,28 @@ def _sample_paths() -> tuple[Path, Path]:
 
 def _has_key() -> bool:
     return bool(settings.openai_api_key)
+
+
+def chrome(nav: str) -> dict:
+    """Context every page needs for the sidebar shell."""
+    return {
+        "agency": settings.agency_name,
+        "model": settings.model,
+        "has_key": _has_key(),
+        "nav": nav,
+        "nav_counts": {"candidates": len(STORE), "shortlists": len(BATCHES)},
+    }
+
+
+def _initials(name: Optional[str], fallback: str) -> str:
+    parts = [p for p in (name or "").split() if p]
+    if not parts:
+        return fallback[:2].upper()
+    return (parts[0][0] + (parts[-1][0] if len(parts) > 1 else "")).upper()
+
+
+def _tone(pct: int) -> str:
+    return "ok" if pct >= 72 else ("warn" if pct >= 45 else "bad")
 
 
 _model_cache: Optional[list] = None
@@ -84,23 +106,84 @@ def available_models() -> list:
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    cv_sample, jd_sample = _sample_paths()
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "has_key": _has_key(),
-            "model": settings.model,
-            "model_choices": available_models(),
-            "agency": settings.agency_name,
-            "sample_jd": jd_sample.read_text(encoding="utf-8") if jd_sample.exists() else "",
-            "sample_cv_name": cv_sample.name,
-            "recent": [
-                {"id": did, "ref": candidate_ref(d), "role": d.brief.role_title}
-                for did, d in list(STORE.items())[-6:]
-            ],
-        },
-    )
+    _, jd_sample = _sample_paths()
+
+    recent = []
+    for did, d in list(STORE.items())[-5:][::-1]:
+        pct = d.suitability["percent"]
+        anon = bool(getattr(d, "anonymise", settings.anonymise_by_default))
+        name = candidate_ref(d) if anon else (d.profile.full_name or "Unnamed")
+        recent.append({
+            "id": did, "name": name, "role": d.brief.role_title,
+            "initials": _initials(None if anon else d.profile.full_name, "SD"),
+            "percent": pct, "tone": _tone(pct),
+        })
+
+    batches = []
+    for bid, b in list(BATCHES.items())[-5:][::-1]:
+        batches.append({
+            "id": bid, "role": b.brief.role_title if b.brief else "Reading the brief…",
+            "total": b.total, "elapsed": int(b.elapsed), "running": b.running,
+        })
+
+    best = max((d.suitability["percent"] for d in STORE.values()), default=0)
+
+    ctx = chrome("dashboard")
+    ctx.update({
+        "model_choices": available_models(),
+        "sample_jd": jd_sample.read_text(encoding="utf-8") if jd_sample.exists() else "",
+        "recent": recent,
+        "recent_batches": batches,
+        "stats": {"dossiers": len(STORE), "shortlists": len(BATCHES), "best_match": best},
+    })
+    return templates.TemplateResponse(request, "index.html", ctx)
+
+
+@app.get("/candidates", response_class=HTMLResponse)
+def candidates(request: Request):
+    rows = []
+    for did, d in list(STORE.items())[::-1]:
+        pct = d.suitability["percent"]
+        anon = bool(getattr(d, "anonymise", settings.anonymise_by_default))
+        name = candidate_ref(d) if anon else (d.profile.full_name or "Unnamed candidate")
+        rows.append({
+            "href": "/dossier/{}".format(did),
+            "badge": _initials(None if anon else d.profile.full_name, "SD"),
+            "title": name,
+            "subtitle": "{} · {} yrs experience".format(d.brief.role_title, d.timeline.total_experience_years),
+            "meta": "{} of {} requirements".format(len(d.matched_requirements), len(d.assessment.requirement_matches)),
+            "pill": "{}%".format(pct), "pill_tone": _tone(pct), "square": False,
+        })
+    ctx = chrome("candidates")
+    ctx.update({
+        "heading": "Candidates", "rows": rows,
+        "empty_title": "No resumes analysed yet",
+        "empty_detail": "Upload a resume and a job description to build your first match report.",
+    })
+    return templates.TemplateResponse(request, "list.html", ctx)
+
+
+@app.get("/shortlists", response_class=HTMLResponse)
+def shortlists(request: Request):
+    rows = []
+    for bid, b in list(BATCHES.items())[::-1]:
+        rows.append({
+            "href": "/batch/{}".format(bid),
+            "badge": str(b.total),
+            "title": b.brief.role_title if b.brief else "Reading the brief…",
+            "subtitle": "{} candidates · {} analysed".format(b.total, len(b.succeeded)),
+            "meta": "{}s".format(int(b.elapsed)),
+            "pill": "Running" if b.running else "Done",
+            "pill_tone": "info" if b.running else "ok",
+            "square": True,
+        })
+    ctx = chrome("shortlists")
+    ctx.update({
+        "heading": "Shortlists", "rows": rows,
+        "empty_title": "No shortlists yet",
+        "empty_detail": "Upload several resumes at once to rank them against one brief.",
+    })
+    return templates.TemplateResponse(request, "list.html", ctx)
 
 
 @app.post("/generate")
@@ -172,15 +255,9 @@ def batch_view(request: Request, batch_id: str):
     batch = BATCHES.get(batch_id)
     if batch is None:
         raise HTTPException(404, "Batch not found. It may have been lost on server restart.")
-    return templates.TemplateResponse(
-        request,
-        "batch.html",
-        {
-            "batch": batch,
-            "agency": settings.agency_name,
-            "model": batch.model,
-        },
-    )
+    ctx = chrome("shortlists")
+    ctx.update({"batch": batch, "model": batch.model})
+    return templates.TemplateResponse(request, "batch.html", ctx)
 
 
 @app.get("/batch/{batch_id}/status")
@@ -241,24 +318,25 @@ def review(request: Request, dossier_id: str, blind: Optional[int] = None):
         strong_pct = sum(1 for m in hits if m.verdict == "strong") / len(must)
         partial_pct = sum(1 for m in hits if m.verdict == "partial") / len(must)
 
-    return templates.TemplateResponse(
-        request,
-        "review.html",
-        {
-            "dossier_id": dossier_id,
-            "dossier": view,
-            "anonymise": anonymise,
-            "ref": candidate_ref(dossier),
-            "agency": settings.agency_name,
-            "model": settings.model,
-            "computed_kinds": COMPUTED_KINDS,
-            "must_have_texts": must,
-            "source_html": render_source(view.document.text, view.verification),
-            "strong_pct": strong_pct,
-            "partial_pct": partial_pct,
-            "is_demo": dossier_id.startswith("demo-"),
-        },
-    )
+    anon_name = candidate_ref(dossier)
+    display = anon_name if anonymise else (view.profile.full_name or "Unnamed candidate")
+
+    ctx = chrome("candidates")
+    ctx.update({
+        "dossier_id": dossier_id,
+        "dossier": view,
+        "anonymise": anonymise,
+        "ref": anon_name,
+        "display_name": display,
+        "computed_kinds": COMPUTED_KINDS,
+        "must_have_texts": must,
+        "skills_by_category": _skills_by_category(view),
+        "source_html": render_source(view.document.text, view.verification),
+        "strong_pct": strong_pct,
+        "partial_pct": partial_pct,
+        "is_demo": dossier_id.startswith("demo-"),
+    })
+    return templates.TemplateResponse(request, "review.html", ctx)
 
 
 @app.get("/dossier/{dossier_id}/embed", response_class=HTMLResponse)
@@ -281,12 +359,9 @@ def pdf(dossier_id: str, blind: int = 1):
 
 
 def _error(request: Request, title: str, detail: str) -> HTMLResponse:
-    return templates.TemplateResponse(
-        request,
-        "error.html",
-        {"title": title, "detail": detail, "agency": settings.agency_name},
-        status_code=400,
-    )
+    ctx = chrome("dashboard")
+    ctx.update({"title": title, "detail": detail})
+    return templates.TemplateResponse(request, "error.html", ctx, status_code=400)
 
 
 @app.get("/health")

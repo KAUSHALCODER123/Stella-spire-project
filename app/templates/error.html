@@ -1,10 +1,16 @@
 {% extends "base.html" %}
-{% block title %}SpireDossier — {{ title }}{% endblock %}
+{% block title %}{{ title }} — SpireDossier{% endblock %}
+{% block chrome %}
+<div class="topbar"><div><div class="crumb">Workspace</div><h1>Something needs attention</h1></div></div>
+{% endblock %}
 {% block content %}
-<main style="max-width:720px;">
-  <p class="eyebrow" style="margin-top:32px;">Could not continue</p>
-  <h1 style="font-size:32px; margin-top:8px;">{{ title }}</h1>
-  <div class="notice warn" style="margin:20px 0 26px;">{{ detail }}</div>
-  <a class="btn ghost" href="/">Back to intake</a>
-</main>
+<div class="page" style="max-width:720px;">
+  <div class="card reveal">
+    <div class="card-body">
+      <h2 style="font-size:18px;">{{ title }}</h2>
+      <div class="notice warn" style="margin:14px 0 20px;">{{ detail }}</div>
+      <a class="btn" href="/">Back to dashboard</a>
+    </div>
+  </div>
+</div>
 {% endblock %}

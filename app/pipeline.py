@@ -81,6 +81,81 @@ class Dossier:
     def high_severity_flags(self) -> List[RiskFlag]:
         return [f for f in self.flags if f.severity == "high"]
 
+    # --- scores for the match report -------------------------------------
+
+    @property
+    def matched_requirements(self) -> List:
+        return [m for m in self.assessment.requirement_matches if m.verdict in ("strong", "partial")]
+
+    @property
+    def missing_requirements(self) -> List:
+        return [m for m in self.assessment.requirement_matches if m.verdict in ("absent", "unclear")]
+
+    @property
+    def experience_match(self) -> dict:
+        """Candidate years against the years the brief asks for."""
+        required = self.brief.stated_min_years
+        actual = self.timeline.total_experience_years
+        if not required:
+            return {"required": None, "actual": actual, "ratio": 1.0, "verdict": "not specified", "shortfall": 0.0}
+        ratio = min(actual / required, 1.0) if required else 1.0
+        shortfall = round(max(required - actual, 0.0), 1)
+        if actual >= required:
+            verdict = "meets"
+        elif ratio >= 0.8:
+            verdict = "close"
+        else:
+            verdict = "short"
+        return {"required": required, "actual": actual, "ratio": ratio, "verdict": verdict, "shortfall": shortfall}
+
+    @property
+    def skill_stats(self) -> dict:
+        total = len(self.profile.skills)
+        evidenced = sum(1 for s in self.profile.skills if s.evidence)
+        return {
+            "total": total,
+            "evidenced": evidenced,
+            "listed_only": total - evidenced,
+            "ratio": evidenced / total if total else 0.0,
+        }
+
+    @property
+    def suitability(self) -> dict:
+        """A single headline number, shown alongside the parts it is made of.
+
+        Weighted so must-have coverage dominates, with a penalty for
+        high-severity flags. The components are always displayed next to it --
+        a score a recruiter cannot decompose is a score they cannot argue with,
+        which makes it useless.
+        """
+        coverage = self.must_have_coverage
+        coverage = coverage if coverage is not None else 0.0
+
+        matches = self.assessment.requirement_matches
+        strength = (sum(1 for m in matches if m.verdict == "strong") / len(matches)) if matches else 0.0
+
+        exp = self.experience_match["ratio"]
+        penalty = min(0.15, 0.05 * len(self.high_severity_flags))
+
+        score = max(0.0, min(1.0, 0.55 * coverage + 0.25 * strength + 0.20 * exp - penalty))
+        if score >= 0.72:
+            band, tone = "Strong fit", "ok"
+        elif score >= 0.45:
+            band, tone = "Possible fit", "warn"
+        else:
+            band, tone = "Weak fit", "bad"
+
+        return {
+            "score": score,
+            "percent": round(score * 100),
+            "band": band,
+            "tone": tone,
+            "coverage": coverage,
+            "strength": strength,
+            "experience": exp,
+            "penalty": penalty,
+        }
+
 
 def build_dossier(
     *,

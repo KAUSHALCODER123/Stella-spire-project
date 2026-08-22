@@ -1,297 +1,504 @@
 {% extends "base.html" %}
-{% block title %}{{ ref }} — {{ dossier.brief.role_title }}{% endblock %}
-
-{% block status %}
-  <span>{{ dossier.model or model }}</span>
-  <span class="num">{{ dossier.elapsed_seconds }}s</span>
-  <span class="num">{{ dossier.usage.input_tokens + dossier.usage.output_tokens }} tok</span>
-{% endblock %}
+{% block title %}{{ ref }} — match report{% endblock %}
 
 {% block head %}
 <style>
-  .subbar {
-    position: sticky; top: 54px; z-index: 25; background: var(--sheet);
-    border-bottom: 1px solid var(--rule); padding: 13px var(--pad);
-    display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap;
-  }
-  .subbar h1 { font-size: 25px; line-height: 1.1; }
-  .subbar .role { font-size: 13.5px; color: var(--slate-3); margin-top: 2px; }
-  .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 2px; overflow: hidden; }
-  .seg a, .seg button {
-    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
-    padding: 8px 13px; text-decoration: none; color: var(--slate-3); background: var(--sheet);
-    border: 0; cursor: pointer;
-  }
-  .seg a + a, .seg button + button { border-left: 1px solid var(--rule); }
-  .seg [aria-current="true"], .seg [aria-pressed="true"] { background: var(--slate); color: #fff; }
+  .scorerow { display: grid; grid-template-columns: 320px repeat(3, minmax(0,1fr)); gap: 16px; margin-bottom: 18px; }
 
-  /* --- the trust bar: the product's promise, measured ------------------- */
-  .trust {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px;
-    padding: 11px 16px; margin-bottom: 16px;
+  /* ---------- headline score ---------- */
+  .scorecard { padding: 22px; display: flex; align-items: center; gap: 20px; }
+  .ring { position: relative; width: 108px; height: 108px; flex: none; }
+  .ring svg { width: 108px; height: 108px; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 9; stroke-linecap: round; }
+  .ring .track { stroke: var(--border); }
+  .ring .val { stroke: var(--primary-500); transition: stroke-dashoffset 1.1s var(--ease); }
+  .ring .val.ok { stroke: var(--ok); } .ring .val.warn { stroke: var(--warn); } .ring .val.bad { stroke: var(--bad); }
+  .ring .mid {
+    position: absolute; inset: 0; display: grid; place-content: center; text-align: center;
   }
-  .trust .big { font-family: var(--mono); font-size: 17px; font-weight: 600; }
-  .trust .bar { flex: 1; min-width: 120px; height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; }
-  .trust .bar i { display: block; height: 100%; background: var(--mark-edge); }
-  .trust .txt { font-size: 13px; color: var(--slate-3); }
+  .ring .mid b { font-size: 27px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+  .ring .mid span { font-size: 11px; color: var(--ink-4); }
+  .scorecard .meta .t { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-4); }
+  .scorecard .meta h2 { font-size: 20px; margin-top: 4px; }
+  .scorecard .meta p { margin: 7px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
 
-  /* --- panes ------------------------------------------------------------ */
-  .panes { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; align-items: start; }
-  .pane-head {
-    display: flex; align-items: center; justify-content: space-between; gap: 10px;
-    padding: 10px 15px; border-bottom: 1px solid var(--rule-soft);
+  /* ---------- small score cards ---------- */
+  .mini { padding: 18px 20px; display: flex; flex-direction: column; }
+  .mini .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .mini .lbl { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+  .mini .v { font-size: 26px; font-weight: 700; letter-spacing: -.028em; margin: 9px 0 3px; line-height: 1.05; }
+  .mini .sub { font-size: 12.5px; color: var(--ink-4); margin-bottom: 14px; }
+  .mini .bar { margin-top: auto; }
+
+  /* ---------- tabs ---------- */
+  .tabs { display: inline-flex; background: var(--surface); border: 1px solid var(--border);
+          border-radius: var(--r-sm); padding: 3px; gap: 2px; box-shadow: var(--sh-1); }
+  .tabs button {
+    border: 0; background: none; cursor: pointer; font-family: var(--font);
+    font-size: 13px; font-weight: 600; color: var(--ink-3);
+    padding: 7px 15px; border-radius: 6px; transition: background var(--fast) var(--ease), color var(--fast) var(--ease);
   }
-  .scroller { max-height: calc(100vh - 268px); min-height: 460px; overflow: auto; }
-  .source-pane { position: sticky; top: 132px; }
+  .tabs button:hover { color: var(--ink); }
+  .tabs button[aria-pressed="true"] { background: var(--primary); color: #fff; }
 
+  /* ---------- comparison ---------- */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .reqrow { padding: 13px 20px; border-bottom: 1px solid var(--border-2); }
+  .reqrow:last-child { border-bottom: none; }
+  .reqrow .h { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .reqrow .txt { font-size: 13.5px; font-weight: 500; line-height: 1.45; }
+  .reqrow .ev {
+    margin-top: 8px; padding: 9px 12px; border-radius: var(--r-sm);
+    background: var(--surface-2); border-left: 3px solid var(--primary-100);
+    font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+    width: 100%; text-align: left; border-top: 0; border-right: 0; border-bottom: 0; cursor: pointer;
+    font-family: var(--font); transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease);
+  }
+  .reqrow .ev:hover { background: var(--primary-50); border-left-color: var(--primary-500); }
+  .reqrow .ev.unver { border-left-color: var(--bad); background: var(--bad-50); cursor: default; }
+  .reqrow .note { margin: 7px 0 0; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+  .reqrow .tags { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+  .cnt { font-size: 12.5px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
+
+  /* ---------- experience ---------- */
+  .expwrap { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: center; }
+  .expnum { display: flex; align-items: baseline; gap: 8px; }
+  .expnum b { font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
+  .expnum span { font-size: 13px; color: var(--ink-4); }
+  .scale { margin-top: 14px; }
+  .scale .marks { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-4); margin-top: 7px; }
+
+  /* ---------- skills ---------- */
+  .skillgroup + .skillgroup { margin-top: 18px; }
+  .skillgroup .gh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+  .skillgroup .gt { font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+
+  /* ---------- flags ---------- */
+  .flag { padding: 14px 20px; border-bottom: 1px solid var(--border-2); }
+  .flag:last-child { border-bottom: none; }
+  .flag .h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 5px; }
+  .flag p { margin: 0; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+
+  /* ---------- evidence tab ---------- */
+  .evgrid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; align-items: start; }
+  .scroller { max-height: 640px; overflow: auto; }
   pre.src {
-    margin: 0; padding: 16px; font-family: var(--mono); font-size: 11.5px; line-height: 1.75;
-    color: var(--slate-2); white-space: pre-wrap; word-break: break-word;
+    margin: 0; padding: 18px; font-family: ui-monospace, Consolas, monospace;
+    font-size: 12px; line-height: 1.8; color: var(--ink-2); white-space: pre-wrap; word-break: break-word;
   }
-  .src-empty { padding: 16px; color: var(--slate-4); font-size: 13px; }
+  .src-empty { padding: 20px; color: var(--ink-4); font-size: 13px; }
+  .src-mark {
+    background: var(--accent-100); color: inherit; padding: 2px 0; border-radius: 3px;
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+    transition: background var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  }
+  .src-mark.is-active { background: #D6CEFB; box-shadow: 0 0 0 3px rgba(122,107,240,.22); }
 
-  /* --- claims ----------------------------------------------------------- */
-  .claim { padding: 13px 15px; border-bottom: 1px solid var(--rule-soft); }
-  .claim:last-child { border-bottom: none; }
-  .claim .top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
-  .claim .req { font-weight: 600; font-size: 14.5px; }
-  .must { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--spire); }
-  .verdict { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; white-space: nowrap; }
-  .verdict.strong { color: var(--strong); } .verdict.partial { color: var(--partial); }
-  .verdict.absent { color: var(--absent); } .verdict.unclear { color: var(--slate-3); }
-  .claim .note { margin: 6px 0 0; font-size: 13px; color: var(--slate-2); }
-  .claim .stamps { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .trustbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .trustbar .b { flex: 1; min-width: 130px; }
 
-  .flagrow { padding: 12px 15px; border-bottom: 1px solid var(--rule-soft); }
-  .flagrow:last-child { border-bottom: none; }
-  .flagrow .h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 3px; }
-  .sev { font-family: var(--mono); font-size: 9.5px; font-weight: 600; letter-spacing: .12em; }
-  .sev.high { color: var(--absent); } .sev.medium { color: var(--partial); } .sev.low { color: var(--slate-4); }
-  .kind { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--slate-4); }
-  .flagrow p { margin: 0; font-size: 13.5px; color: var(--slate-2); line-height: 1.5; }
-
-  .ledger { font-family: var(--mono); font-size: 11.5px; }
-  .ledger .r { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--rule-soft); }
-  .ledger .r:last-child { border-bottom: none; }
-  .ledger .k { color: var(--slate-3); }
-  .ledger .v { font-weight: 500; font-variant-numeric: tabular-nums; }
-  .v.strong { color: var(--strong); } .v.partial { color: var(--partial); } .v.absent { color: var(--absent); }
-
-  .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; }
-
-  iframe.doc { width: 100%; height: calc(100vh - 250px); min-height: 560px; border: 0; display: block; background: #fff; }
+  iframe.doc { width: 100%; height: 78vh; min-height: 560px; border: 0; display: block; border-radius: var(--r); background: #fff; }
   [hidden] { display: none !important; }
 
-  @media (max-width: 1080px) {
-    .panes { grid-template-columns: 1fr; }
-    .source-pane { position: static; }
-    .scroller { max-height: 62vh; }
+  @media (max-width: 1180px) {
+    .scorerow { grid-template-columns: 1fr 1fr; }
+    .compare, .evgrid, .expwrap { grid-template-columns: 1fr; }
+    .evgrid > .card:last-child { position: static !important; }
+  }
+  @media (max-width: 760px) {
+    .scorerow { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .scorerow > .card:first-child { grid-column: 1 / -1; }
+    /* Tabs scroll rather than wrap into an unreadable stack. */
+    .topbar .acts { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; scrollbar-width: none; }
+    .topbar .acts::-webkit-scrollbar { display: none; }
+    .tabs { flex: none; }
+    .tabs button { padding: 9px 13px; }
+    .topbar .acts .btn { flex: none; }
+    .scroller { max-height: 460px; }
+    .reqrow, .flag { padding: 12px 15px; }
+    .expwrap > .grid { grid-template-columns: 1fr 1fr !important; }
+  }
+  @media (max-width: 520px) {
+    .scorerow { grid-template-columns: 1fr; }
+    .scorecard { flex-direction: column; align-items: flex-start; gap: 16px; padding: 18px; }
+    .ring, .ring svg { width: 92px; height: 92px; }
+    .ring .mid b { font-size: 24px; }
+    .reqrow .h { flex-direction: column; align-items: flex-start; gap: 6px; }
+    pre.src { font-size: 11.5px; padding: 14px; }
+    iframe.doc { height: 62vh; min-height: 380px; }
   }
 </style>
 {% endblock %}
 
-{% block content %}
-
-<div class="subbar">
+{% block chrome %}
+<div class="topbar">
   <div>
-    <p class="eyebrow">Candidate dossier</p>
-    <h1 class="num">{{ ref }}</h1>
-    <div class="role">{{ dossier.brief.role_title }}{% if dossier.brief.client_name %} · {{ dossier.brief.client_name }}{% endif %}</div>
+    <div class="crumb"><a href="/candidates" style="color:inherit;">Candidates</a> / Match report</div>
+    <h1>{{ display_name }}</h1>
+    <div class="hint" style="margin-top:2px;">
+      {{ dossier.brief.role_title }}{% if dossier.brief.client_name %} · {{ dossier.brief.client_name }}{% endif %}
+    </div>
   </div>
-  <div class="tools">
-    <span class="seg">
-      <button type="button" id="tab-trace" aria-pressed="true">Trace</button>
+  <div class="acts">
+    <span class="tabs">
+      <button type="button" id="tab-overview" aria-pressed="true">Overview</button>
+      <button type="button" id="tab-evidence" aria-pressed="false">Evidence</button>
       <button type="button" id="tab-doc" aria-pressed="false">Document</button>
     </span>
-    <span class="seg">
-      <a href="?blind=1" aria-current="{{ 'true' if anonymise else 'false' }}">Blind</a>
-      <a href="?blind=0" aria-current="{{ 'false' if anonymise else 'true' }}">Identified</a>
+    <span class="tabs">
+      <button type="button" onclick="location.href='?blind=1'" aria-pressed="{{ 'true' if anonymise else 'false' }}">Blind</button>
+      <button type="button" onclick="location.href='?blind=0'" aria-pressed="{{ 'false' if anonymise else 'true' }}">Named</button>
     </span>
     <a class="btn sm" href="/dossier/{{ dossier_id }}/pdf?blind={{ 1 if anonymise else 0 }}">Download PDF</a>
-    <a class="btn sm ghost" href="/">New dossier</a>
   </div>
 </div>
+{% endblock %}
 
-<main>
+{% block content %}
+<div class="page">
 
   {% if is_demo %}
-  <div class="notice info" style="margin-bottom:14px;">
-    <strong>Sample dossier.</strong> Rendered from a stored fixture — no model call was made.
+  <div class="notice info reveal" style="margin-bottom:16px;">
+    <strong>Sample report.</strong> Rendered from stored data — no model call was made.
   </div>
   {% endif %}
-
   {% for w in dossier.warnings %}
   <div class="notice warn" style="margin-bottom:12px;">{{ w }}</div>
   {% endfor %}
 
+  {% set s = dossier.suitability %}
+  {% set exp = dossier.experience_match %}
+  {% set sk = dossier.skill_stats %}
   {% set v = dossier.verification %}
-  {% if v and v.total %}
-  <div class="trust">
-    <span class="big">{{ v.verified }}/{{ v.total }}</span>
-    <span class="txt">quotes traced to the source document</span>
-    <span class="bar"><i style="width: {{ (v.rate * 100) | round(0) }}%"></i></span>
-    {% if v.unverified %}
-      <span class="stamp unverified">{{ v.unverified | length }} UNVERIFIED</span>
-    {% else %}
-      <span class="stamp traced">ALL TRACED</span>
-    {% endif %}
-  </div>
-  {% endif %}
 
-  <!-- ============================ TRACE VIEW ============================ -->
-  <section id="view-trace" class="panes">
-
-    <div class="sheet">
-      <div class="pane-head">
-        <span class="eyebrow">Dossier · claims</span>
-        <span class="hint">click a quote to find it</span>
+  <!-- ======================= SCORE ROW ======================= -->
+  <div class="scorerow">
+    <div class="card scorecard reveal">
+      <div class="ring">
+        <svg viewBox="0 0 108 108">
+          <circle class="track" cx="54" cy="54" r="45"/>
+          <circle class="val {{ s.tone }}" cx="54" cy="54" r="45"
+                  stroke-dasharray="282.7" stroke-dashoffset="282.7" data-pct="{{ s.percent }}"/>
+        </svg>
+        <span class="mid"><b class="num countup" data-to="{{ s.percent }}" data-suffix="%">0%</b><span>match</span></span>
       </div>
-      <div class="scroller">
-
-        {% for m in dossier.assessment.requirement_matches %}
-          {% set tr = v.trace_for(m.evidence) if v else None %}
-          <div class="claim">
-            <div class="top">
-              <span class="req">{{ m.requirement }}
-                {% if m.requirement in must_have_texts %}<span class="must">MUST</span>{% endif %}
-              </span>
-              <span class="verdict {{ m.verdict }}">{{ m.verdict | upper }}</span>
-            </div>
-
-            {% if m.evidence %}
-              {% if tr and tr.verified %}
-                <button class="quote" type="button" data-goto="{{ v.by_quote[m.evidence] }}">
-                  <em>“{{ m.evidence }}”</em>
-                </button>
-                <div class="stamps">
-                  {% if tr.source == 'brief' %}<span class="stamp brief">FROM THE BRIEF</span>
-                  {% else %}<span class="stamp traced">TRACED · {{ tr.status | upper }}</span>{% endif %}
-                </div>
-              {% else %}
-                <div class="quote unverified"><em>“{{ m.evidence }}”</em></div>
-                <div class="stamps"><span class="stamp unverified">UNVERIFIED — NOT FOUND IN SOURCE</span></div>
-              {% endif %}
-            {% endif %}
-
-            {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
-          </div>
-        {% endfor %}
-
+      <div class="meta">
+        <div class="t">Overall suitability</div>
+        <h2>{{ s.band }}</h2>
+        <p>Weighted from must-have coverage, strength of evidence and experience fit, less a penalty for high-severity flags.</p>
       </div>
     </div>
 
-    <div class="source-pane">
-      <div class="sheet" style="margin-bottom:16px;">
-        <div class="pane-head">
-          <span class="eyebrow">Source · {{ dossier.document.filename or 'uploaded CV' }}</span>
-          <span class="hint">{{ dossier.document.source_format | upper }}</span>
+    <div class="card mini reveal">
+      <div class="top">
+        <span class="lbl">Requirements met</span>
+        <span class="pill {{ 'ok' if s.coverage >= 0.7 else ('warn' if s.coverage >= 0.45 else 'bad') }}">
+          {{ (s.coverage * 100) | round | int }}%
+        </span>
+      </div>
+      <div class="v num">{{ dossier.matched_requirements | length }}<span style="font-size:16px;color:var(--ink-4);font-weight:600;">/{{ dossier.assessment.requirement_matches | length }}</span></div>
+      <div class="sub">{{ dossier.match_counts.strong }} strong · {{ dossier.match_counts.partial }} partial</div>
+      <div class="bar split">
+        <i class="ok" data-w="{{ (strong_pct * 100) | round | int }}"></i>
+        <i class="warn" data-w="{{ (partial_pct * 100) | round | int }}"></i>
+      </div>
+    </div>
+
+    <div class="card mini reveal">
+      <div class="top">
+        <span class="lbl">Experience</span>
+        {% if exp.required %}
+          <span class="pill {{ 'ok' if exp.verdict == 'meets' else ('warn' if exp.verdict == 'close' else 'bad') }}">
+            {{ exp.verdict }}
+          </span>
+        {% else %}<span class="pill plain">not specified</span>{% endif %}
+      </div>
+      <div class="v num">{{ exp.actual }}<span style="font-size:16px;color:var(--ink-4);font-weight:600;">y</span></div>
+      <div class="sub">
+        {% if exp.required %}{{ exp.required | int }}y required{% if exp.shortfall %} · {{ exp.shortfall }}y short{% endif %}
+        {% else %}No minimum stated in the brief{% endif %}
+      </div>
+      <div class="bar"><i class="{{ 'ok' if exp.verdict == 'meets' else ('warn' if exp.verdict == 'close' else 'bad') }}" data-w="{{ (exp.ratio * 100) | round | int }}"></i></div>
+    </div>
+
+    <div class="card mini reveal">
+      <div class="top">
+        <span class="lbl">Evidence verified</span>
+        {% if v and v.total %}
+          <span class="pill {{ 'ok' if v.rate >= 0.9 else ('warn' if v.rate >= 0.7 else 'bad') }}">{{ (v.rate * 100) | round | int }}%</span>
+        {% else %}<span class="pill plain">n/a</span>{% endif %}
+      </div>
+      <div class="v num">{% if v %}{{ v.verified }}<span style="font-size:16px;color:var(--ink-4);font-weight:600;">/{{ v.total }}</span>{% else %}—{% endif %}</div>
+      <div class="sub">quotes found in the source resume</div>
+      <div class="bar"><i class="{{ 'ok' if v and v.rate >= 0.9 else 'warn' }}" data-w="{{ ((v.rate if v else 0) * 100) | round | int }}"></i></div>
+    </div>
+  </div>
+
+  <!-- ======================= OVERVIEW ======================= -->
+  <section id="view-overview" class="grid" style="gap:18px;">
+
+    <div class="card reveal">
+      <div class="card-head"><h2>AI summary</h2><span class="pill accent">Generated</span></div>
+      <div class="card-body">
+        <p style="margin:0 0 12px; font-size:14.5px; line-height:1.6;">{{ dossier.assessment.executive_summary }}</p>
+        <p style="margin:0; font-size:13.5px; color:var(--ink-3); line-height:1.6;">{{ dossier.assessment.fit_rationale }}</p>
+      </div>
+    </div>
+
+    <div class="compare">
+      <div class="card reveal">
+        <div class="card-head">
+          <h2>Matched requirements</h2>
+          <span class="cnt">{{ dossier.matched_requirements | length }}</span>
         </div>
-        <div class="scroller" id="source-scroll">{{ source_html | safe }}</div>
+        <div>
+          {% for m in dossier.matched_requirements %}
+            {% set tr = v.trace_for(m.evidence) if v else None %}
+            <div class="reqrow">
+              <div class="h">
+                <span class="txt">{{ m.requirement }}</span>
+                <span class="pill {{ 'ok' if m.verdict == 'strong' else 'warn' }}">{{ m.verdict }}</span>
+              </div>
+              {% if m.evidence %}
+                {% if tr and tr.verified %}
+                  <button class="ev" type="button" data-goto="{{ v.by_quote[m.evidence] }}">“{{ m.evidence }}”</button>
+                  <div class="tags">
+                    {% if tr.source == 'brief' %}<span class="pill info">From the brief</span>
+                    {% else %}<span class="pill accent">Verified in resume</span>{% endif %}
+                  </div>
+                {% else %}
+                  <div class="ev unver">“{{ m.evidence }}”</div>
+                  <div class="tags"><span class="pill bad">Unverified — not found in source</span></div>
+                {% endif %}
+              {% endif %}
+              {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
+            </div>
+          {% else %}
+            <div class="card-body hint">No requirements matched.</div>
+          {% endfor %}
+        </div>
       </div>
 
-      <div class="sheet" style="margin-bottom:16px;">
-        <div class="pane-head">
-          <span class="eyebrow">Computed</span>
-          <span class="stamp computed">ARITHMETIC</span>
+      <div class="card reveal">
+        <div class="card-head">
+          <h2>Missing requirements</h2>
+          <span class="cnt">{{ dossier.missing_requirements | length }}</span>
         </div>
-        <div class="body">
-          <div class="ledger facts">
-            <div class="r"><span class="k">experience</span><span class="v">{{ dossier.timeline.total_experience_years }}y</span></div>
-            <div class="r"><span class="k">avg tenure</span><span class="v">{{ dossier.timeline.average_tenure_years }}y</span></div>
-            <div class="r"><span class="k">roles</span><span class="v">{{ dossier.timeline.intervals | length }}</span></div>
-            <div class="r"><span class="k">gaps</span><span class="v">{{ dossier.timeline.gaps | length }}</span></div>
-            <div class="r"><span class="k">strong</span><span class="v strong">{{ dossier.match_counts.strong }}</span></div>
-            <div class="r"><span class="k">partial</span><span class="v partial">{{ dossier.match_counts.partial }}</span></div>
-            <div class="r"><span class="k">unclear</span><span class="v">{{ dossier.match_counts.unclear }}</span></div>
-            <div class="r"><span class="k">absent</span><span class="v absent">{{ dossier.match_counts.absent }}</span></div>
+        <div>
+          {% for m in dossier.missing_requirements %}
+            <div class="reqrow">
+              <div class="h">
+                <span class="txt">{{ m.requirement }}</span>
+                <span class="pill {{ 'bad' if m.verdict == 'absent' else 'plain' }}">{{ m.verdict }}</span>
+              </div>
+              {% if m.evidence %}<div class="ev unver">“{{ m.evidence }}”</div>{% endif %}
+              {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
+            </div>
+          {% else %}
+            <div class="card-body hint">Nothing missing — every requirement is covered.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head"><h2>Experience match</h2><span class="pill info">Computed</span></div>
+      <div class="card-body">
+        <div class="expwrap">
+          <div>
+            <div class="expnum"><b class="num">{{ exp.actual }}</b><span>years of experience</span></div>
+            <div class="scale">
+              <div class="bar" style="height:9px;">
+                <i class="{{ 'ok' if exp.verdict == 'meets' else ('warn' if exp.verdict == 'close' else 'bad') }}" data-w="{{ (exp.ratio * 100) | round | int }}"></i>
+              </div>
+              <div class="marks">
+                <span>0y</span>
+                <span>{% if exp.required %}{{ exp.required | int }}y required{% else %}no minimum stated{% endif %}</span>
+              </div>
+            </div>
+          </div>
+          <div class="grid" style="grid-template-columns:1fr 1fr; gap:14px;">
+            <div><div class="hint">Average tenure</div><div style="font-size:18px;font-weight:700;" class="num">{{ dossier.timeline.average_tenure_years }}y</div></div>
+            <div><div class="hint">Roles</div><div style="font-size:18px;font-weight:700;" class="num">{{ dossier.timeline.intervals | length }}</div></div>
+            <div><div class="hint">Employment gaps</div><div style="font-size:18px;font-weight:700;" class="num">{{ dossier.timeline.gaps | length }}</div></div>
+            <div><div class="hint">Notice period</div><div style="font-size:18px;font-weight:700;" class="num">{% if dossier.profile.notice_period_days %}{{ dossier.profile.notice_period_days }}d{% else %}—{% endif %}</div></div>
           </div>
         </div>
       </div>
+    </div>
 
-      {% if dossier.flags %}
-      <div class="sheet">
-        <div class="pane-head">
-          <span class="eyebrow">Flags</span>
-          <span class="num" style="font-size:11.5px; color:var(--slate-3);">{{ dossier.flags | length }}</span>
+    <div class="card reveal">
+      <div class="card-head">
+        <h2>Extracted skills</h2>
+        <span class="cnt">{{ sk.evidenced }} of {{ sk.total }} demonstrated in described work</span>
+      </div>
+      <div class="card-body">
+        {% for category, skills in skills_by_category.items() %}
+        <div class="skillgroup">
+          <div class="gh"><span class="gt">{{ category }}</span></div>
+          <div class="chips">
+            {% for s2 in skills %}
+              <span class="chip {{ 'solid' if s2.evidence else 'ghost' }}"><span class="dot"></span>{{ s2.name }}</span>
+            {% endfor %}
+          </div>
         </div>
-        <div>
-          {% for f in dossier.flags %}
-            {% set ftr = v.trace_for(f.evidence) if v else None %}
-            <div class="flagrow">
+        {% endfor %}
+        <p class="hint" style="margin:16px 0 0;">
+          Filled chips are demonstrated in described work. Dashed chips appear in the skills list with no supporting detail found —
+          the fastest signal of an inflated resume.
+        </p>
+      </div>
+    </div>
+
+    {% if dossier.flags %}
+    <div class="card reveal">
+      <div class="card-head"><h2>Flags for review</h2><span class="cnt">{{ dossier.flags | length }}</span></div>
+      <div>
+        {% for f in dossier.flags %}
+        <div class="flag">
+          <div class="h">
+            <span class="pill {{ 'bad' if f.severity == 'high' else ('warn' if f.severity == 'medium' else 'plain') }}">{{ f.severity }}</span>
+            <span class="hint" style="text-transform:capitalize;">{{ f.kind | replace("_", " ") }}</span>
+            {% if f.kind in computed_kinds %}<span class="pill info">Computed</span>{% endif %}
+          </div>
+          <p>{{ f.summary }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if dossier.assessment.open_questions %}
+    <div class="card reveal">
+      <div class="card-head"><h2>Questions for the screening call</h2></div>
+      <div class="card-body">
+        <ul style="margin:0; padding-left:19px;">
+          {% for q in dossier.assessment.open_questions %}<li style="margin-bottom:7px;">{{ q }}</li>{% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+  </section>
+
+  <!-- ======================= EVIDENCE ======================= -->
+  <section id="view-evidence" hidden>
+    {% if v and v.total %}
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-body">
+        <div class="trustbar">
+          <span style="font-size:19px;font-weight:700;" class="num">{{ v.verified }}/{{ v.total }}</span>
+          <span class="hint" style="font-size:13.5px;">quotes located in the source resume</span>
+          <span class="b bar"><i class="{{ 'ok' if v.rate >= 0.9 else 'warn' }}" data-w="{{ (v.rate * 100) | round | int }}"></i></span>
+          {% if v.unverified %}<span class="pill bad">{{ v.unverified | length }} unverified</span>
+          {% else %}<span class="pill ok">All verified</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="evgrid">
+      <div class="card">
+        <div class="card-head"><h2>Claims</h2><span class="hint">click a quote to locate it</span></div>
+        <div class="scroller">
+          {% for m in dossier.assessment.requirement_matches %}
+            {% set tr = v.trace_for(m.evidence) if v else None %}
+            <div class="reqrow">
               <div class="h">
-                <span class="sev {{ f.severity }}">{{ f.severity | upper }}</span>
-                <span class="kind">{{ f.kind | replace("_", " ") }}</span>
-                {% if f.kind in computed_kinds %}<span class="stamp computed">COMPUTED</span>{% endif %}
+                <span class="txt">{{ m.requirement }}</span>
+                <span class="pill {{ 'ok' if m.verdict == 'strong' else ('warn' if m.verdict == 'partial' else ('bad' if m.verdict == 'absent' else 'plain')) }}">{{ m.verdict }}</span>
               </div>
-              <p>{{ f.summary }}</p>
-              {% if f.evidence and f.kind not in computed_kinds %}
-                {% if ftr and ftr.verified %}
-                  <button class="quote" type="button" data-goto="{{ v.by_quote[f.evidence] }}"><em>“{{ f.evidence }}”</em></button>
-                  <div class="stamps">
-                    {% if ftr.source == 'brief' %}<span class="stamp brief">FROM THE BRIEF</span>
-                    {% else %}<span class="stamp traced">TRACED</span>{% endif %}
-                  </div>
+              {% if m.evidence %}
+                {% if tr and tr.verified %}
+                  <button class="ev" type="button" data-goto="{{ v.by_quote[m.evidence] }}">“{{ m.evidence }}”</button>
                 {% else %}
-                  <div class="quote unverified"><em>“{{ f.evidence }}”</em></div>
-                  <div class="stamps"><span class="stamp unverified">UNVERIFIED</span></div>
+                  <div class="ev unver">“{{ m.evidence }}”</div>
                 {% endif %}
               {% endif %}
+              {% if m.note %}<p class="note">{{ m.note }}</p>{% endif %}
             </div>
           {% endfor %}
         </div>
       </div>
-      {% endif %}
-    </div>
 
+      <div class="card" style="position:sticky; top:96px;">
+        <div class="card-head">
+          <h2>Source resume</h2>
+          <span class="pill plain">{{ dossier.document.source_format | upper }}</span>
+        </div>
+        <div class="scroller" id="source-scroll">{{ source_html | safe }}</div>
+      </div>
+    </div>
   </section>
 
-  <!-- ========================== DOCUMENT VIEW =========================== -->
-  <section id="view-doc" class="sheet" hidden>
+  <!-- ======================= DOCUMENT ======================= -->
+  <section id="view-doc" class="card" hidden style="overflow:hidden;">
     <iframe class="doc" title="Candidate dossier {{ ref }}"
             src="/dossier/{{ dossier_id }}/embed?blind={{ 1 if anonymise else 0 }}"></iframe>
   </section>
 
-</main>
+</div>
 
 <script>
 (function () {
-  var scroller = document.getElementById('source-scroll');
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Bars and the score ring fill once, after first paint.
+  requestAnimationFrame(function () {
+    document.querySelectorAll("[data-w]").forEach(function (el) { el.style.width = el.dataset.w + "%"; });
+    var ring = document.querySelector(".ring .val");
+    if (ring) {
+      var c = 2 * Math.PI * 45;
+      ring.style.strokeDashoffset = c - (c * (parseFloat(ring.dataset.pct) || 0) / 100);
+    }
+  });
+
+  document.querySelectorAll(".countup").forEach(function (el) {
+    var to = parseFloat(el.dataset.to) || 0, suffix = el.dataset.suffix || "";
+    if (reduce) { el.textContent = to + suffix; return; }
+    var start = performance.now(), dur = 900;
+    (function tick(now) {
+      var t = Math.min(1, (now - start) / dur);
+      el.textContent = Math.round(to * (1 - Math.pow(1 - t, 3))) + suffix;
+      if (t < 1) requestAnimationFrame(tick);
+    })(start);
+  });
+
+  // ---- tabs ----
+  var views = { overview: "view-overview", evidence: "view-evidence", doc: "view-doc" };
+  function show(which) {
+    Object.keys(views).forEach(function (k) {
+      document.getElementById(views[k]).hidden = k !== which;
+      document.getElementById("tab-" + k).setAttribute("aria-pressed", String(k === which));
+    });
+  }
+  Object.keys(views).forEach(function (k) {
+    document.getElementById("tab-" + k).addEventListener("click", function () { show(k); });
+  });
+
+  // ---- claim -> source ----
   var active = null;
+  document.body.addEventListener("click", function (e) {
+    var btn = e.target.closest(".ev[data-goto]");
+    if (!btn) return;
+    if (document.getElementById("view-evidence").hidden) show("evidence");
 
-  document.querySelectorAll('.quote[data-goto]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var mark = document.getElementById('trace-' + btn.dataset.goto);
+    requestAnimationFrame(function () {
+      var mark = document.getElementById("trace-" + btn.dataset.goto);
+      var scroller = document.getElementById("source-scroll");
       if (!mark) return;
-      if (active) { active.classList.remove('is-active'); }
-      // Re-trigger the stroke animation on a mark that was already active.
-      mark.classList.remove('is-active');
-      void mark.offsetWidth;
-      mark.classList.add('is-active');
+      if (active) active.classList.remove("is-active");
+      mark.classList.add("is-active");
       active = mark;
-
       if (scroller) {
-        var top = mark.offsetTop - scroller.clientHeight / 2 + mark.offsetHeight / 2;
-        scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        scroller.scrollTo({
+          top: Math.max(0, mark.offsetTop - scroller.clientHeight / 2 + mark.offsetHeight / 2),
+          behavior: reduce ? "auto" : "smooth"
+        });
       }
     });
   });
-
-  var tabTrace = document.getElementById('tab-trace');
-  var tabDoc = document.getElementById('tab-doc');
-  var viewTrace = document.getElementById('view-trace');
-  var viewDoc = document.getElementById('view-doc');
-
-  function show(which) {
-    var isTrace = which === 'trace';
-    viewTrace.hidden = !isTrace;
-    viewDoc.hidden = isTrace;
-    tabTrace.setAttribute('aria-pressed', String(isTrace));
-    tabDoc.setAttribute('aria-pressed', String(!isTrace));
-  }
-  tabTrace.addEventListener('click', function () { show('trace'); });
-  tabDoc.addEventListener('click', function () { show('doc'); });
 })();
 </script>
 {% endblock %}
