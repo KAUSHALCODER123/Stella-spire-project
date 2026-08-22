@@ -40,6 +40,13 @@ from app.matching import (
     plan_pairs,
     score_affinity,
 )
+from app.intake import (
+    CandidatePreferences,
+    ConstraintCheck,
+    RoleConstraints,
+    check_constraints,
+    preferences_from_profile,
+)
 from app.pipeline import Dossier
 from app.schemas import CandidateProfile, JobBrief, RiskFlag
 from app.verify import verify_assessment
@@ -59,6 +66,7 @@ class Requisition:
     jd_text: str
     brief: Optional[JobBrief] = None
     error: Optional[str] = None
+    constraints: Optional[RoleConstraints] = None
 
     @property
     def title(self) -> str:
@@ -88,6 +96,7 @@ class Candidate:
     computed_flags: List[RiskFlag] = field(default_factory=list)
     error: Optional[str] = None
     warnings: List[str] = field(default_factory=list)
+    prefs: Optional[CandidatePreferences] = None
 
     @property
     def ok(self) -> bool:
@@ -111,7 +120,8 @@ class Pair:
     affinity: Affinity
     selected: bool
     reason: str
-    status: str = "screened"          # screened | queued | running | done | failed | skipped
+    status: str = "screened"          # screened | queued | running | done | failed | skipped | blocked
+    check: Optional[ConstraintCheck] = None
     dossier_id: Optional[str] = None
     dossier: Optional[Dossier] = None
     error: Optional[str] = None
@@ -167,6 +177,11 @@ class MatchRun:
     @property
     def assessed_pairs(self) -> List[Pair]:
         return [p for p in self.pairs if p.dossier]
+
+    @property
+    def blocked_pairs(self) -> List[Pair]:
+        """Ruled out on declared facts alone, before a single token was spent."""
+        return [p for p in self.pairs if p.status == "blocked"]
 
     @property
     def completed(self) -> int:
@@ -259,6 +274,10 @@ def _execute(run: MatchRun, store: Dict[str, Dossier]) -> None:
     run.phase = "briefs"
 
     def parse_brief(req: Requisition) -> None:
+        # A role posted through the recruiter form already has its brief:
+        # the form did the work this call exists to do.
+        if req.brief is not None:
+            return
         try:
             req.brief = llm.extract_job_brief(req.jd_text, usage=run.usage, model=run.model)
         except Exception as exc:  # noqa: BLE001
@@ -303,12 +322,24 @@ def _execute(run: MatchRun, store: Dict[str, Dossier]) -> None:
     # --- 3. screen (free) -------------------------------------------------
     run.phase = "screening"
     affinities: Dict[Tuple[int, int], Affinity] = {}
+    blocked: Dict[Tuple[int, int], ConstraintCheck] = {}
+
     for cand in run.candidates:
         if not cand.ok:
             continue
+        # Prefer what the candidate declared on a form; fall back to whatever
+        # the CV itself stated, so the ad-hoc upload path is filtered too.
+        prefs = cand.prefs or preferences_from_profile(cand.profile, cand.timeline)
         for req in run.requisitions:
             if not req.ok:
                 continue
+            # 1. Declared facts first. Free, and decisive when it fires.
+            if req.constraints is not None:
+                check = check_constraints(prefs, req.constraints)
+                if check.blocked:
+                    blocked[(cand.index, req.index)] = check
+                    continue
+            # 2. Only unblocked pairs are worth scoring.
             affinities[(cand.index, req.index)] = score_affinity(cand.profile, cand.timeline, req.brief)
 
     plans = plan_pairs(
@@ -324,6 +355,15 @@ def _execute(run: MatchRun, store: Dict[str, Dossier]) -> None:
              status="queued" if p.selected else "skipped")
         for p in plans
     ]
+    # Blocked pairs are recorded, not hidden: a recruiter can see exactly why
+    # someone was ruled out, and the reason is a number they can argue with.
+    for (ci, ri), check in blocked.items():
+        run.pairs.append(Pair(
+            candidate_index=ci, requisition_index=ri,
+            affinity=Affinity(score=0.0, term_ratio=0.0),
+            selected=False, status="blocked", check=check,
+            reason=check.summary,
+        ))
 
     # --- 4. assess the selected pairs -------------------------------------
     run.phase = "assessing"

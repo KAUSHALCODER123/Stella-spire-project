@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Open roles — SpireDossier{% endblock %}
+
+{% block head %}
+<style>
+  .split { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; align-items: start; }
+  .rolecard { padding: 16px 20px; border-bottom: 1px solid var(--border-2); }
+  .rolecard:last-child { border-bottom: none; }
+  .rolecard .h { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .rolecard .t { font-size: 15px; font-weight: 600; }
+  .rolecard .c { font-size: 12.5px; color: var(--ink-4); margin-top: 1px; }
+  .facts { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+  .reqs { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .del { background: none; border: 0; cursor: pointer; color: var(--ink-4); font-size: 12.5px; font-weight: 600; padding: 4px; }
+  .del:hover { color: var(--bad); }
+
+  .arow { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border-2); }
+  .arow:last-child { border-bottom: none; }
+  .arow .av { width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid; place-items: center;
+              background: var(--accent-50); color: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .arow .n { flex: 1; min-width: 0; }
+  .arow .n b { display: block; font-size: 13.5px; font-weight: 600; }
+  .arow .n span { font-size: 11.5px; color: var(--ink-4); }
+  .empty { padding: 40px 20px; text-align: center; }
+  .empty .t { font-size: 15px; font-weight: 600; }
+  .empty .d { font-size: 13.5px; color: var(--ink-4); margin: 6px 0 18px; }
+
+  .linkbox {
+    display: flex; align-items: center; gap: 10px; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: var(--r-sm); padding: 10px 13px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; color: var(--ink-2);
+  }
+  .linkbox span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block chrome %}
+<div class="topbar">
+  <div>
+    <div class="crumb">Workspace</div>
+    <h1>Open roles</h1>
+    <div class="hint" style="margin-top:2px;">
+      {{ roles|length }} role{{ '' if roles|length == 1 else 's' }} ·
+      {{ applicants|length }} applicant{{ '' if applicants|length == 1 else 's' }}
+    </div>
+  </div>
+  <div class="acts">
+    <a class="btn ghost" href="/apply">Application form</a>
+    <a class="btn" href="/post-role">Post a role</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page">
+  <div class="split">
+
+    <div class="card reveal">
+      <div class="card-head">
+        <h2>Roles</h2>
+        <span class="free" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
+              color:var(--ok);background:var(--ok-50);padding:3px 9px;border-radius:6px;">No AI cost to store</span>
+      </div>
+      <div>
+        {% for rid, r in roles %}
+        <div class="rolecard">
+          <div class="h">
+            <div>
+              <div class="t">{{ r.role_title }}</div>
+              <div class="c">{{ r.client_name or 'Unspecified client' }}{% if r.location %} · {{ r.location }}{% endif %}
+                {% if r.work_mode and r.work_mode != 'any' %} · {{ r.work_mode }}{% endif %}</div>
+            </div>
+            <form method="post" action="/roles/{{ rid }}/delete">
+              <button class="del" type="submit" title="Remove this role">Remove</button>
+            </form>
+          </div>
+          <div class="facts">
+            {% if r.min_years %}<span class="pill plain">{{ r.min_years | int }}+ yrs</span>{% endif %}
+            {% if r.ctc_min_lpa or r.ctc_max_lpa %}
+              <span class="pill plain">{{ r.ctc_min_lpa or '?' }}–{{ r.ctc_max_lpa or '?' }} LPA</span>{% endif %}
+            {% if r.max_notice_days %}<span class="pill plain">≤{{ r.max_notice_days }}d notice</span>{% endif %}
+            {% if r.domain %}<span class="pill accent">{{ r.domain }}</span>{% endif %}
+          </div>
+          {% if r.must_have_skills %}
+          <div class="reqs">
+            {% for s in r.must_have_skills[:6] %}<span class="chip solid">{{ s }}</span>{% endfor %}
+            {% if r.must_have_skills|length > 6 %}<span class="chip ghost">+{{ r.must_have_skills|length - 6 }} more</span>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="empty">
+          <div class="t">No open roles yet</div>
+          <div class="d">Post a role and its brief is built from your answers — no AI parsing needed.</div>
+          <a class="btn" href="/post-role">Post a role</a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="grid" style="gap:18px;">
+      <div class="card reveal">
+        <div class="card-head"><h2>Applicants</h2><span class="hint">{{ applicants|length }}</span></div>
+        <div>
+          {% for aid, a in applicants %}
+          <div class="arow">
+            <span class="av">{{ (a.prefs.full_name or a.filename)[:2] | upper }}</span>
+            <span class="n">
+              <b>{{ a.prefs.full_name or a.filename }}</b>
+              <span>
+                {% if a.prefs.years_experience %}{{ a.prefs.years_experience }}y{% endif %}
+                {% if a.prefs.current_location %} · {{ a.prefs.current_location }}{% endif %}
+                {% if a.prefs.notice_period_days %} · {{ a.prefs.notice_period_days }}d notice{% endif %}
+              </span>
+            </span>
+            {% if a.prefs.expected_ctc_lpa %}<span class="pill plain">{{ a.prefs.expected_ctc_lpa }} LPA</span>{% endif %}
+          </div>
+          {% else %}
+          <div class="empty" style="padding:30px 20px;">
+            <div class="t" style="font-size:14px;">No applicants yet</div>
+            <div class="d">Share the form link below.</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-head"><h2>Application link</h2></div>
+        <div class="card-body">
+          <div class="linkbox">
+            <span id="applylink">{{ request.base_url }}apply</span>
+            <button type="button" class="btn sm ghost" id="copylink">Copy</button>
+          </div>
+          <p class="hint" style="margin:10px 0 0;">Send this to candidates. What they fill in filters them
+             against every open role for free.</p>
+        </div>
+      </div>
+
+      <div class="card reveal">
+        <div class="card-head"><h2>Run the match</h2></div>
+        <div class="card-body">
+          <p class="hint" style="margin:0 0 14px;">
+            Every applicant against every open role. Roles posted here need no brief parsing, and
+            declared conflicts — pay band, notice, location — are removed before anything is spent.
+          </p>
+          <form method="post" action="/roles/match">
+            <label class="field-label" for="model">Model</label>
+            <select id="model" name="model" style="margin-bottom:14px;">
+              {% for value, label, note in (model_choices or []) %}
+                <option value="{{ value }}" {% if value == model %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <label class="check" style="margin-bottom:16px;">
+              <input type="checkbox" name="anonymise" checked>
+              <span class="t">Blind profiles</span>
+            </label>
+            <button class="btn" type="submit" style="width:100%;"
+                    {% if not roles or not applicants or not has_key %}disabled{% endif %}>
+              Match {{ applicants|length }} × {{ roles|length }}
+            </button>
+            {% if not has_key %}<p class="hint" style="margin:9px 0 0;">Add an API key to enable matching.</p>
+            {% elif not roles or not applicants %}<p class="hint" style="margin:9px 0 0;">Needs at least one role and one applicant.</p>{% endif %}
+          </form>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+document.getElementById("copylink").addEventListener("click", function () {
+  var text = document.getElementById("applylink").textContent.trim();
+  var btn = this;
+  navigator.clipboard.writeText(text).then(function () {
+    btn.textContent = "Copied";
+    setTimeout(function () { btn.textContent = "Copy"; }, 1600);
+  }).catch(function () { btn.textContent = "Copy failed"; });
+});
+</script>
+{% endblock %}

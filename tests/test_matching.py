@@ -458,3 +458,84 @@ def test_extraction_can_use_a_cheaper_model_than_assessment(tmp_path, monkeypatc
 
     assert ("extract", "small-model") in used
     assert ("assess", "big-model") in used
+
+
+# --- the constraint gate inside a run --------------------------------------
+
+
+def test_blocked_pairs_never_reach_the_model(tmp_path, stub_llm):
+    """The whole point of the gate: a declared conflict costs zero tokens."""
+    from app.intake import CandidatePreferences, RoleConstraints
+    from app.matchrun import create_run, execute
+
+    jds = [("cheap.txt", "Cheap Role\nNeed Kubernetes")]
+    cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
+    run = create_run(jds=jds, cvs=cvs, model="stub", anonymise=True)
+    # Candidate will not go below 90 LPA; the role tops out at 40.
+    run.candidates[0].prefs = CandidatePreferences(min_acceptable_ctc_lpa=90)
+    run.requisitions[0].constraints = RoleConstraints(role_title="Cheap Role", ctc_max_lpa=40)
+    execute(run.id, {})
+
+    assert stub_llm["assess"] == 0, "a blocked pair must not be assessed"
+    assert len(run.blocked_pairs) == 1
+    assert not run.selected_pairs
+
+
+def test_a_blocked_pair_explains_itself_with_numbers(tmp_path, stub_llm):
+    from app.intake import CandidatePreferences, RoleConstraints
+    from app.matchrun import create_run, execute
+
+    cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
+    run = create_run(jds=[("r.txt", "Role\nNeed Kubernetes")], cvs=cvs, model="stub", anonymise=True)
+    run.candidates[0].prefs = CandidatePreferences(notice_period_days=180)
+    run.requisitions[0].constraints = RoleConstraints(role_title="R", max_notice_days=30)
+    execute(run.id, {})
+
+    pair = run.blocked_pairs[0]
+    assert "180" in pair.reason and "30" in pair.reason
+    assert pair.check is not None and pair.check.blocked
+
+
+def test_unblocked_pairs_are_unaffected_by_the_gate(tmp_path, stub_llm):
+    from app.intake import CandidatePreferences, RoleConstraints
+    from app.matchrun import create_run, execute
+
+    cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
+    run = create_run(jds=[("r.txt", "Role\nNeed Kubernetes")], cvs=cvs, model="stub", anonymise=True)
+    run.candidates[0].prefs = CandidatePreferences(min_acceptable_ctc_lpa=30)
+    run.requisitions[0].constraints = RoleConstraints(role_title="R", ctc_max_lpa=60)
+    execute(run.id, {})
+
+    assert not run.blocked_pairs
+    assert stub_llm["assess"] == 1
+
+
+def test_the_gate_only_applies_where_constraints_were_declared(tmp_path, stub_llm):
+    """A role with no form answers must behave exactly as before."""
+    from app.matchrun import create_run, execute
+
+    cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
+    run = create_run(jds=[("r.txt", "Role\nNeed Kubernetes")], cvs=cvs, model="stub", anonymise=True)
+    execute(run.id, {})
+    assert not run.blocked_pairs
+    assert stub_llm["assess"] >= 1
+
+
+def test_gate_scales_the_saving_across_a_grid(tmp_path, stub_llm):
+    """Three candidates, two roles, one role priced out for everyone."""
+    from app.intake import CandidatePreferences, RoleConstraints
+    from app.matchrun import create_run, execute
+
+    cvs = write_cvs(tmp_path, [("a.txt", CV_BODY), ("b.txt", CV_BODY), ("c.txt", CV_BODY)])
+    run = create_run(jds=[("rich.txt", "Rich Role\nNeed Kubernetes"),
+                          ("poor.txt", "Poor Role\nNeed PyTorch")],
+                     cvs=cvs, model="stub", anonymise=True, top_roles=2)
+    for c in run.candidates:
+        c.prefs = CandidatePreferences(min_acceptable_ctc_lpa=80)
+    run.requisitions[0].constraints = RoleConstraints(role_title="Rich", ctc_max_lpa=120)
+    run.requisitions[1].constraints = RoleConstraints(role_title="Poor", ctc_max_lpa=40)
+    execute(run.id, {})
+
+    assert len(run.blocked_pairs) == 3, "every candidate is priced out of the poor role"
+    assert all(p.requisition_index == 0 for p in run.selected_pairs)
+    assert stub_llm["assess"] == 3

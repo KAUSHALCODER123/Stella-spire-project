@@ -1,0 +1,127 @@
+{% extends "form_base.html" %}
+{% block title %}Submit your CV — {{ agency }}{% endblock %}
+
+{% block chrome %}
+<div class="topbar">
+  <div><div class="crumb">Candidates</div><h1>Submit your CV</h1></div>
+  {% if roles %}<div class="acts"><span class="pill info">{{ roles|length }} open role{{ '' if roles|length == 1 else 's' }}</span></div>{% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page" style="max-width:920px;">
+  <div class="why reveal" style="margin-bottom:18px;">
+    <b>A few questions save everyone time.</b> Telling us your notice period, location and salary
+    expectation up front means you are only put forward for roles that actually work for you —
+    and you will not be contacted about openings that were never going to fit.
+  </div>
+
+  <form method="post" action="/apply" enctype="multipart/form-data">
+    <div class="card reveal" style="margin-bottom:18px;">
+      <div class="card-head"><h2>Your CV</h2><span class="pill plain">PDF · DOCX · TXT</span></div>
+      <div class="card-body">
+        <label class="field-label" for="cv">Attach your CV *</label>
+        <input id="cv" name="cv" type="file" accept=".pdf,.docx,.txt,.md" required>
+        <p class="hint" style="margin:8px 0 0;">Up to 10 MB. A text CV reads far better than a scan.</p>
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head"><h2>About you</h2><span class="free">Helps us filter for free</span></div>
+      <div class="card-body">
+
+        <div class="fieldset">
+          <div class="formgrid">
+            <div>
+              <label class="field-label" for="full_name">Full name</label>
+              <input id="full_name" name="full_name" type="text" placeholder="Arjun Menon">
+            </div>
+            <div>
+              <label class="field-label" for="email">Email</label>
+              <input id="email" name="email" type="email" placeholder="you@example.com">
+            </div>
+            <div>
+              <label class="field-label" for="phone">Phone</label>
+              <input id="phone" name="phone" type="tel" placeholder="+91 98450 00000">
+            </div>
+            <div>
+              <label class="field-label" for="years_experience">Total years of experience</label>
+              <input id="years_experience" name="years_experience" type="number" step="0.5" min="0" placeholder="8">
+            </div>
+          </div>
+        </div>
+
+        <div class="fieldset">
+          <div class="legend">What you are looking for</div>
+          <p class="sub">One per line, or comma separated.</p>
+          <div class="formgrid">
+            <div class="full">
+              <label class="field-label" for="target_roles">Roles you want</label>
+              <textarea id="target_roles" class="short" name="target_roles"
+                        placeholder="ML Platform Lead&#10;Head of AI Engineering"></textarea>
+            </div>
+            <div>
+              <label class="field-label" for="current_location">Where you are now</label>
+              <input id="current_location" name="current_location" type="text" placeholder="Bengaluru">
+            </div>
+            <div>
+              <label class="field-label" for="preferred_locations">Where you would work</label>
+              <input id="preferred_locations" name="preferred_locations" type="text" placeholder="Bengaluru, Hyderabad, Dubai">
+            </div>
+            <div>
+              <label class="field-label" for="work_mode">Working arrangement</label>
+              <select id="work_mode" name="work_mode">
+                <option value="any">No strong preference</option>
+                <option value="onsite">Onsite</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="remote">Remote only</option>
+              </select>
+            </div>
+            <div style="display:flex; align-items:flex-end; padding-bottom:9px;">
+              <label class="check">
+                <input type="checkbox" name="open_to_relocate">
+                <span class="t">I am open to relocating</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="fieldset">
+          <div class="legend">Availability and expectations</div>
+          <p class="sub">Honest numbers here mean fewer wasted conversations. Leave blank if you would rather discuss it.</p>
+          <div class="formgrid">
+            <div>
+              <label class="field-label" for="notice_period_days">Notice period (days)</label>
+              <input id="notice_period_days" name="notice_period_days" type="number" min="0" placeholder="90">
+            </div>
+            <div>
+              <label class="field-label" for="current_ctc_lpa">Current CTC (INR LPA)</label>
+              <input id="current_ctc_lpa" name="current_ctc_lpa" type="number" step="0.5" min="0" placeholder="68">
+            </div>
+            <div>
+              <label class="field-label" for="expected_ctc_lpa">Expected CTC (INR LPA)</label>
+              <input id="expected_ctc_lpa" name="expected_ctc_lpa" type="number" step="0.5" min="0" placeholder="90">
+            </div>
+            <div>
+              <label class="field-label" for="min_acceptable_ctc_lpa">Lowest you would accept</label>
+              <input id="min_acceptable_ctc_lpa" name="min_acceptable_ctc_lpa" type="number" step="0.5" min="0" placeholder="80">
+              <p class="hint" style="margin:6px 0 0;">Used as a hard floor — you will not be shown roles below it.</p>
+            </div>
+            <div class="full">
+              <label class="field-label" for="notes">Anything else we should know</label>
+              <textarea id="notes" class="short" name="notes"
+                        placeholder="Visa status, a career break worth explaining, companies to avoid…"></textarea>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="sticky-actions">
+      <button class="btn" type="submit">Submit application</button>
+      <span class="hint">Your details are used to match you to roles, nothing else.</span>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -40,6 +40,13 @@ class Settings(BaseSettings):
     # so the client evaluates the profile blind.
     anonymise_by_default: bool = True
 
+    # Durable storage for uploaded documents. Optional: without it the app
+    # works exactly as before, writing only to local disk.
+    supabase_url: str = ""
+    supabase_key: str = ""
+    supabase_bucket_resumes: str = "resumes"
+    supabase_bucket_jds: str = "jds"
+
     upload_dir: Path = ROOT / "data" / "uploads"
     output_dir: Path = ROOT / "data" / "out"
     sample_dir: Path = ROOT / "data" / "samples"

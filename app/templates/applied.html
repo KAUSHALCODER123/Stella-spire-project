@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Application received{% endblock %}
+{% block chrome %}
+<div class="topbar"><div><div class="crumb">Candidates</div><h1>Application received</h1></div></div>
+{% endblock %}
+{% block content %}
+<div class="page" style="max-width:640px;">
+  <div class="card reveal">
+    <div class="card-body" style="text-align:center; padding:44px 26px;">
+      <div style="width:52px;height:52px;border-radius:50%;background:var(--ok-50);color:var(--ok);
+                  display:grid;place-items:center;margin:0 auto 16px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:24px;height:24px;">
+          <path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h2 style="font-size:19px;">Thank you{% if applicant.full_name %}, {{ applicant.full_name.split()[0] }}{% endif %}</h2>
+      <p class="hint" style="font-size:14px; margin:9px auto 0; max-width:44ch;">
+        Your CV is with the team. You will be matched against
+        {% if roles %}the {{ roles|length }} open role{{ '' if roles|length == 1 else 's' }}{% else %}open roles{% endif %}
+        and contacted only where there is a genuine fit.
+      </p>
+      <div style="margin-top:22px;"><a class="btn ghost" href="/apply">Submit another CV</a></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -27,10 +27,17 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.templating import Jinja2Templates
 
 from app.batch import BATCHES, create_batch, run_batch, status_payload
+from app.intake import (
+    CandidatePreferences,
+    RoleConstraints,
+    brief_from_constraints,
+    role_text,
+)
 from app.matchrun import RUNS, create_run, execute as execute_run
 from app.matchrun import status_payload as run_status
 from app.extract.llm import LLMError
 from app.config import MODEL_CHOICES, settings
+from app.storage import get_storage, store_document
 from app.uploads import display_filename, safe_filename, upload_suffix
 from app.extract.documents import SUPPORTED_SUFFIXES, extract_text
 from app.pipeline import Dossier, build_dossier
@@ -46,6 +53,12 @@ app = FastAPI(title="SpireDossier")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 STORE: Dict[str, Dossier] = {}
+
+# Structured intake. Roles posted through the recruiter form need no JD
+# parse at all, and applicants who filled the seeker form arrive with hard
+# constraints already declared.
+ROLE_LIBRARY: Dict[str, RoleConstraints] = {}
+APPLICANTS: Dict[str, dict] = {}
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
@@ -67,7 +80,11 @@ def chrome(nav: str) -> dict:
         "model": settings.model,
         "has_key": _has_key(),
         "nav": nav,
-        "nav_counts": {"candidates": len(STORE), "shortlists": len(BATCHES) + len(RUNS)},
+        "nav_counts": {
+            "candidates": len(STORE),
+            "roles": len(ROLE_LIBRARY),
+            "shortlists": len(BATCHES) + len(RUNS),
+        },
     }
 
 
@@ -243,7 +260,8 @@ async def generate(
                 "The limit is 10 MB; this one is {:.1f} MB.".format(len(payload) / 1e6),
             )
         path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], safe_filename(upload.filename))
-        path.write_bytes(payload)
+        store_document(payload=payload, filename=upload.filename,
+                        kind="resume", local_path=path)
         # Display name stays the original; only the stored path is sanitised.
         saved.append((Path(upload.filename.replace("\\", "/")).name or "resume", path))
 
@@ -318,7 +336,8 @@ async def match(
             return _error(request, "Job description too large: {}".format(upload.filename),
                           "The limit is 10 MB per file.")
         path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], safe_filename(upload.filename))
-        path.write_bytes(payload)
+        store_document(payload=payload, filename=upload.filename,
+                        kind="jd", local_path=path)
         try:
             text = extract_text(path).text
         except Exception as exc:  # noqa: BLE001
@@ -342,7 +361,8 @@ async def match(
             return _error(request, "File too large: {}".format(upload.filename),
                           "The limit is 10 MB; this one is {:.1f} MB.".format(len(payload) / 1e6))
         path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], safe_filename(upload.filename))
-        path.write_bytes(payload)
+        store_document(payload=payload, filename=upload.filename,
+                        kind="resume", local_path=path)
         cvs.append((display_filename(upload.filename), path))
 
     chosen = model if model in {m[0] for m in available_models()} else settings.model
@@ -352,6 +372,210 @@ async def match(
         assess_all=bool(assess_all),
         extraction_model=settings.extraction_model or chosen,
     )
+    threading.Thread(target=execute_run, args=(run.id, STORE), daemon=True).start()
+    return RedirectResponse("/match/{}".format(run.id), status_code=303)
+
+
+def _split(raw):
+    """Comma or newline separated free text into a clean list."""
+    out = []
+    for chunk in (raw or "").replace("\n", ",").split(","):
+        chunk = chunk.strip()
+        if chunk:
+            out.append(chunk)
+    return out
+
+
+def _num(raw):
+    try:
+        text = str(raw or "").strip()
+        return float(text) if text else None
+    except ValueError:
+        return None
+
+
+def _int(raw):
+    value = _num(raw)
+    return int(value) if value is not None else None
+
+
+# --------------------------------------------------------------------------
+# Recruiter: post a role
+# --------------------------------------------------------------------------
+
+
+@app.get("/post-role", response_class=HTMLResponse)
+def post_role_form(request: Request):
+    ctx = chrome("roles")
+    ctx.update({"roles": list(ROLE_LIBRARY.items())})
+    return templates.TemplateResponse(request, "post_role.html", ctx)
+
+
+@app.post("/post-role")
+async def post_role(
+    request: Request,
+    role_title: str = Form(""),
+    client_name: str = Form(""),
+    location: str = Form(""),
+    work_mode: str = Form("any"),
+    min_years: str = Form(""),
+    max_years: str = Form(""),
+    ctc_min_lpa: str = Form(""),
+    ctc_max_lpa: str = Form(""),
+    max_notice_days: str = Form(""),
+    must_have_skills: str = Form(""),
+    nice_to_have_skills: str = Form(""),
+    domain: str = Form(""),
+    notes: str = Form(""),
+):
+    if not role_title.strip():
+        return _error(request, "The role needs a title.",
+                      "Give the opening a title so it can be identified in the matrix.")
+
+    rc = RoleConstraints(
+        role_title=role_title.strip(),
+        client_name=client_name.strip() or None,
+        location=location.strip() or None,
+        work_mode=work_mode,
+        min_years=_num(min_years),
+        max_years=_num(max_years),
+        ctc_min_lpa=_num(ctc_min_lpa),
+        ctc_max_lpa=_num(ctc_max_lpa),
+        max_notice_days=_int(max_notice_days),
+        must_have_skills=_split(must_have_skills),
+        nice_to_have_skills=_split(nice_to_have_skills),
+        domain=domain.strip() or None,
+        notes=notes.strip() or None,
+    )
+    ROLE_LIBRARY[uuid.uuid4().hex[:10]] = rc
+    return RedirectResponse("/roles", status_code=303)
+
+
+@app.get("/roles", response_class=HTMLResponse)
+def roles_page(request: Request):
+    ctx = chrome("roles")
+    ctx.update({
+        "roles": list(ROLE_LIBRARY.items()),
+        "applicants": list(APPLICANTS.items()),
+        "model_choices": available_models(),
+    })
+    return templates.TemplateResponse(request, "roles.html", ctx)
+
+
+@app.post("/roles/{role_id}/delete")
+def delete_role(role_id: str):
+    ROLE_LIBRARY.pop(role_id, None)
+    return RedirectResponse("/roles", status_code=303)
+
+
+# --------------------------------------------------------------------------
+# Job seeker: apply
+# --------------------------------------------------------------------------
+
+
+@app.get("/apply", response_class=HTMLResponse)
+def apply_form(request: Request):
+    ctx = chrome("apply")
+    ctx.update({"roles": list(ROLE_LIBRARY.values())})
+    return templates.TemplateResponse(request, "apply.html", ctx)
+
+
+@app.post("/apply")
+async def apply(
+    request: Request,
+    cv: UploadFile = File(...),
+    full_name: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+    target_roles: str = Form(""),
+    current_location: str = Form(""),
+    preferred_locations: str = Form(""),
+    open_to_relocate: Optional[str] = Form(None),
+    work_mode: str = Form("any"),
+    notice_period_days: str = Form(""),
+    current_ctc_lpa: str = Form(""),
+    expected_ctc_lpa: str = Form(""),
+    min_acceptable_ctc_lpa: str = Form(""),
+    years_experience: str = Form(""),
+    notes: str = Form(""),
+):
+    if cv is None or not cv.filename:
+        return _error(request, "No CV attached.",
+                      "Attach your CV so recruiters can review your experience.")
+    if upload_suffix(cv.filename) not in SUPPORTED_SUFFIXES:
+        return _error(request, "That file type is not supported.",
+                      "Please upload one of: {}.".format(", ".join(sorted(SUPPORTED_SUFFIXES))))
+    payload = await cv.read()
+    if len(payload) > MAX_UPLOAD_BYTES:
+        return _error(request, "That file is too large.",
+                      "The limit is 10 MB; yours is {:.1f} MB.".format(len(payload) / 1e6))
+
+    path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], safe_filename(cv.filename))
+    stored = store_document(payload=payload, filename=cv.filename,
+                             kind="resume", local_path=path)
+
+    prefs = CandidatePreferences(
+        full_name=full_name.strip() or None,
+        email=email.strip() or None,
+        phone=phone.strip() or None,
+        target_roles=_split(target_roles),
+        current_location=current_location.strip() or None,
+        preferred_locations=_split(preferred_locations),
+        open_to_relocate=bool(open_to_relocate),
+        work_mode=work_mode,
+        notice_period_days=_int(notice_period_days),
+        current_ctc_lpa=_num(current_ctc_lpa),
+        expected_ctc_lpa=_num(expected_ctc_lpa),
+        min_acceptable_ctc_lpa=_num(min_acceptable_ctc_lpa),
+        years_experience=_num(years_experience),
+        notes=notes.strip() or None,
+    )
+    APPLICANTS[uuid.uuid4().hex[:10]] = {
+        "prefs": prefs,
+        "path": path,
+        "filename": display_filename(cv.filename),
+        "stored": stored,
+    }
+
+    ctx = chrome("apply")
+    ctx.update({"applicant": prefs, "roles": list(ROLE_LIBRARY.values())})
+    return templates.TemplateResponse(request, "applied.html", ctx)
+
+
+@app.post("/roles/match")
+def match_library(request: Request,
+                  model: Optional[str] = Form(None),
+                  anonymise: Optional[str] = Form(None)):
+    """Match every applicant against every open role.
+
+    Roles posted through the form already carry their brief, so this run skips
+    the job-description parse entirely: M calls saved before it starts, and the
+    constraint gate then removes pairs before the affinity screen runs.
+    """
+    if not ROLE_LIBRARY:
+        return _error(request, "No open roles yet.",
+                      "Post at least one role before running a match.")
+    if not APPLICANTS:
+        return _error(request, "No applicants yet.",
+                      "Share the application link so candidates can submit a CV.")
+    if not _has_key():
+        return _error(request, "No API key configured.",
+                      "Add your OPENAI_API_KEY to .env and restart the server.")
+
+    chosen = model if model in {m[0] for m in available_models()} else settings.model
+    run = create_run(
+        jds=[(rc.role_title, role_text(rc)) for rc in ROLE_LIBRARY.values()],
+        cvs=[(a["filename"], a["path"]) for a in APPLICANTS.values()],
+        model=chosen,
+        anonymise=bool(anonymise),
+        extraction_model=settings.extraction_model or chosen,
+    )
+    for req, rc in zip(run.requisitions, ROLE_LIBRARY.values()):
+        req.constraints = rc
+        req.brief = brief_from_constraints(rc)
+    for cand, applicant in zip(run.candidates, APPLICANTS.values()):
+        cand.prefs = applicant["prefs"]
+
     threading.Thread(target=execute_run, args=(run.id, STORE), daemon=True).start()
     return RedirectResponse("/match/{}".format(run.id), status_code=303)
 
@@ -622,4 +846,5 @@ def health():
         "model": settings.model,
         "model_choices": [m[0] for m in available_models()],
         "dossiers_in_memory": len(STORE),
+        "storage": "supabase" if get_storage() else "local disk only",
     }

@@ -343,6 +343,11 @@
         Candidates
         {% if nav_counts and nav_counts.candidates %}<span class="count">{{ nav_counts.candidates }}</span>{% endif %}
       </a>
+      <a href="/roles" class="{% if nav == 'roles' %}on{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        Open roles
+        {% if nav_counts and nav_counts.roles %}<span class="count">{{ nav_counts.roles }}</span>{% endif %}
+      </a>
       <a href="/shortlists" class="{% if nav == 'shortlists' %}on{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
         Shortlists

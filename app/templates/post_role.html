@@ -1,0 +1,109 @@
+{% extends "form_base.html" %}
+{% block title %}Post a role — SpireDossier{% endblock %}
+
+{% block chrome %}
+<div class="topbar">
+  <div><div class="crumb"><a href="/roles" style="color:inherit;">Roles</a> / New</div><h1>Post a role</h1></div>
+  <div class="acts"><a class="btn ghost" href="/roles">All open roles</a></div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page" style="max-width:920px;">
+  <div class="why reveal" style="margin-bottom:18px;">
+    <b>Filling this in costs nothing to run.</b> A role described here needs no AI parsing at all —
+    the brief is built straight from your answers. The pay band, notice limit and location then rule
+    out unsuitable candidates before a single token is spent on them.
+  </div>
+
+  <form method="post" action="/post-role">
+    <div class="card reveal">
+      <div class="card-head"><h2>The opening</h2><span class="free">No AI cost</span></div>
+      <div class="card-body">
+        <div class="fieldset">
+          <div class="formgrid">
+            <div class="full">
+              <label class="field-label" for="role_title">Role title *</label>
+              <input id="role_title" name="role_title" type="text" required placeholder="GenAI Platform Lead">
+            </div>
+            <div>
+              <label class="field-label" for="client_name">Client</label>
+              <input id="client_name" name="client_name" type="text" placeholder="Confidential GCC (US insurer)">
+            </div>
+            <div>
+              <label class="field-label" for="domain">Industry / domain</label>
+              <input id="domain" name="domain" type="text" placeholder="Insurance">
+            </div>
+            <div>
+              <label class="field-label" for="location">Location</label>
+              <input id="location" name="location" type="text" placeholder="Bengaluru">
+            </div>
+            <div>
+              <label class="field-label" for="work_mode">Working arrangement</label>
+              <select id="work_mode" name="work_mode">
+                <option value="any">No preference</option>
+                <option value="onsite">Onsite</option>
+                <option value="hybrid">Hybrid</option>
+                <option value="remote">Remote</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="fieldset">
+          <div class="legend">Hard limits</div>
+          <p class="sub">These filter candidates out for free. Leave anything blank that is negotiable.</p>
+          <div class="formgrid">
+            <div>
+              <label class="field-label" for="min_years">Minimum years experience</label>
+              <input id="min_years" name="min_years" type="number" step="0.5" min="0" placeholder="8">
+            </div>
+            <div>
+              <label class="field-label" for="max_years">Maximum years (optional)</label>
+              <input id="max_years" name="max_years" type="number" step="0.5" min="0" placeholder="15">
+            </div>
+            <div>
+              <label class="field-label" for="ctc_min_lpa">Budget from (INR LPA)</label>
+              <input id="ctc_min_lpa" name="ctc_min_lpa" type="number" step="0.5" min="0" placeholder="85">
+            </div>
+            <div>
+              <label class="field-label" for="ctc_max_lpa">Budget to (INR LPA)</label>
+              <input id="ctc_max_lpa" name="ctc_max_lpa" type="number" step="0.5" min="0" placeholder="110">
+            </div>
+            <div class="full">
+              <label class="field-label" for="max_notice_days">Longest notice period you can accept (days)</label>
+              <input id="max_notice_days" name="max_notice_days" type="number" min="0" placeholder="60">
+            </div>
+          </div>
+        </div>
+
+        <div class="fieldset">
+          <div class="legend">Requirements</div>
+          <p class="sub">One per line, or comma separated. These become the requirement list every CV is matched against.</p>
+          <div class="formgrid">
+            <div class="full">
+              <label class="field-label" for="must_have_skills">Must have</label>
+              <textarea id="must_have_skills" class="short" name="must_have_skills"
+                        placeholder="RAG systems at enterprise scale&#10;LLM fine-tuning&#10;Kubernetes"></textarea>
+            </div>
+            <div class="full">
+              <label class="field-label" for="nice_to_have_skills">Nice to have</label>
+              <textarea id="nice_to_have_skills" class="short" name="nice_to_have_skills"
+                        placeholder="Vector databases at scale&#10;GCC experience"></textarea>
+            </div>
+            <div class="full">
+              <label class="field-label" for="notes">Anything else</label>
+              <textarea id="notes" class="short" name="notes" placeholder="Context a recruiter should know."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sticky-actions">
+      <button class="btn" type="submit">Save role</button>
+      <span class="hint">Saved roles stay open until you remove them.</span>
+    </div>
+  </form>
+</div>
+{% endblock %}
