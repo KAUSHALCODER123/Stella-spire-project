@@ -67,6 +67,9 @@ class Requisition:
     brief: Optional[JobBrief] = None
     error: Optional[str] = None
     constraints: Optional[RoleConstraints] = None
+    # The ROLE_LIBRARY id this came from, so an employer can be shown
+    # exactly the candidates matched to their own openings.
+    source_role_id: Optional[str] = None
 
     @property
     def title(self) -> str:

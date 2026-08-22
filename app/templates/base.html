@@ -119,6 +119,18 @@
   .nav .count { margin-left: auto; font-size: 11.5px; color: var(--ink-4); font-variant-numeric: tabular-nums; }
 
   .side .foot { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid var(--border-2); }
+  .acct { display: flex; align-items: center; gap: 9px; }
+  .acct-av { width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center;
+             background: var(--primary-50); color: var(--primary); font-size: 11.5px; font-weight: 700; }
+  .acct-t { min-width: 0; line-height: 1.25; }
+  .acct-t b { display: block; font-size: 13px; font-weight: 600; overflow: hidden;
+              text-overflow: ellipsis; white-space: nowrap; }
+  .acct-t span { font-size: 11px; color: var(--ink-4); }
+  .signout { width: 100%; padding: 7px 10px; border-radius: 7px; border: 1px solid var(--border);
+             background: var(--surface); color: var(--ink-3); font-family: var(--font);
+             font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: none;
+             transition: background .16s var(--ease), color .16s var(--ease); }
+  .signout:hover { background: var(--surface-2); color: var(--ink); }
   .side .foot .row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--ink-4); }
   .side .foot .row + .row { margin-top: 5px; }
   .side .foot b { color: var(--ink-2); font-weight: 600; }
@@ -327,36 +339,56 @@
 <div class="shell">
 
   <aside class="side">
-    <a class="brand" href="/">
+    <a class="brand" href="{{ '/dashboard' if company else '/' }}">
       <span class="glyph">SD</span>
       <span class="t"><b>SpireDossier</b><span>{{ agency }}</span></span>
     </a>
 
     <nav class="nav">
-      <div class="label eyebrow">Workspace</div>
-      <a href="/" class="{% if nav == 'dashboard' %}on{% endif %}">
+      <div class="label eyebrow">{{ 'Workspace' if is_admin else 'Your account' }}</div>
+      <a href="/dashboard" class="{% if nav == 'dashboard' %}on{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
         Dashboard
       </a>
+      <a href="/roles" class="{% if nav == 'roles' %}on{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        {{ 'Open roles' if is_admin else 'My roles' }}
+        {% if nav_counts and nav_counts.roles %}<span class="count">{{ nav_counts.roles }}</span>{% endif %}
+      </a>
+      {% if is_admin %}
       <a href="/candidates" class="{% if nav == 'candidates' %}on{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/></svg>
         Candidates
         {% if nav_counts and nav_counts.candidates %}<span class="count">{{ nav_counts.candidates }}</span>{% endif %}
-      </a>
-      <a href="/roles" class="{% if nav == 'roles' %}on{% endif %}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-        Open roles
-        {% if nav_counts and nav_counts.roles %}<span class="count">{{ nav_counts.roles }}</span>{% endif %}
       </a>
       <a href="/shortlists" class="{% if nav == 'shortlists' %}on{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>
         Shortlists
         {% if nav_counts and nav_counts.shortlists %}<span class="count">{{ nav_counts.shortlists }}</span>{% endif %}
       </a>
+      {% endif %}
+      <a href="/apply" class="{% if nav == 'apply' %}on{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        Application form
+      </a>
     </nav>
 
     <div class="foot">
-      <div class="row"><span>Model</span><b>{{ model or '—' }}</b></div>
+      {% if company %}
+      <div class="acct">
+        <span class="acct-av">{{ company.initials }}</span>
+        <span class="acct-t">
+          <b>{{ company.name }}</b>
+          <span>{{ company.display_role }}</span>
+        </span>
+      </div>
+      <form method="post" action="/logout" style="margin-top:9px;">
+        <button class="signout" type="submit">Sign out</button>
+      </form>
+      {% else %}
+      <a class="signout" href="/login" style="display:block;text-align:center;">Sign in</a>
+      {% endif %}
+      <div class="row" style="margin-top:10px;"><span>Model</span><b>{{ (model or '—')[:18] }}</b></div>
       <div class="row">
         <span>API</span>
         <b class="status-dot {% if not has_key %}off{% endif %}">{{ 'Connected' if has_key else 'No key' }}</b>

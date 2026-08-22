@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
+import secrets
 import re
 import threading
 import traceback
@@ -26,6 +28,21 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.templating import Jinja2Templates
 
+from starlette.middleware.sessions import SessionMiddleware
+
+from app.accounts import (
+    ADMIN_EMAIL,
+    ADMIN_PASSWORD,
+    COMPANIES,
+    Company,
+    authenticate,
+    create_company,
+    current_company,
+    find_by_email,
+    seed,
+    sign_in,
+    sign_out,
+)
 from app.batch import BATCHES, create_batch, run_batch, status_payload
 from app.intake import (
     CandidatePreferences,
@@ -50,6 +67,18 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 log = logging.getLogger("spiredossier")
 
 app = FastAPI(title="SpireDossier")
+
+# Signed-cookie sessions. The secret is regenerated on restart, which logs
+# everyone out -- acceptable while accounts live in memory anyway, and it
+# avoids shipping a hardcoded key that would look like a real one.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get("SESSION_SECRET") or secrets.token_hex(32),
+    same_site="lax",
+    https_only=False,
+)
+
+seed()
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 STORE: Dict[str, Dossier] = {}
@@ -73,9 +102,35 @@ def _has_key() -> bool:
     return bool(settings.openai_api_key)
 
 
-def chrome(nav: str) -> dict:
+def require_login(request: Request):
+    """The signed-in company, or a redirect to the sign-in page."""
+    company = current_company(request)
+    if company is None:
+        return None, RedirectResponse("/login?next={}".format(request.url.path), status_code=303)
+    return company, None
+
+
+def require_admin(request: Request):
+    """Admin-only surfaces. One check, because there is one login path."""
+    company, redirect = require_login(request)
+    if redirect is not None:
+        return None, redirect
+    if not company.is_admin:
+        return None, _error(
+            request,
+            "That area is for the recruitment team",
+            "Your account can post roles and review candidates matched to them. "
+            "The parsing workspace belongs to {}.".format(settings.agency_name),
+        )
+    return company, None
+
+
+def chrome(nav: str, request: Request = None) -> dict:
     """Context every page needs for the sidebar shell."""
+    company = current_company(request) if request is not None else None
     return {
+        "company": company,
+        "is_admin": bool(company and company.is_admin),
         "agency": settings.agency_name,
         "model": settings.model,
         "has_key": _has_key(),
@@ -128,7 +183,158 @@ def available_models() -> list:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
+def landing(request: Request):
+    """Public front door. Two doors out: apply, or hire."""
+    company = current_company(request)
+    open_roles = [rc for rc in ROLE_LIBRARY.values()]
+    return templates.TemplateResponse(request, "landing.html", {
+        "agency": settings.agency_name,
+        "company": company,
+        "is_admin": bool(company and company.is_admin),
+        "open_roles": open_roles[:6],
+        "role_count": len(open_roles),
+        "company_count": len(COMPANIES) - 1,
+        "applicant_count": len(APPLICANTS),
+    })
+
+
+# --------------------------------------------------------------------------
+# One sign-in for everyone. The account decides what is shown.
+# --------------------------------------------------------------------------
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_form(request: Request, next: str = "/dashboard"):
+    if current_company(request):
+        return RedirectResponse("/dashboard", status_code=303)
+    return templates.TemplateResponse(request, "login.html", {
+        "agency": settings.agency_name, "next": next, "error": None,
+        "companies": [c for c in COMPANIES.values() if not c.is_admin][:5],
+    })
+
+
+@app.post("/login", response_class=HTMLResponse)
+def login(request: Request,
+          email: str = Form(""),
+          password: str = Form(""),
+          next: str = Form("/dashboard")):
+    company = authenticate(email, password)
+    if company is None:
+        # One message for both causes: saying "no such account" tells an
+        # attacker which addresses are registered.
+        return templates.TemplateResponse(request, "login.html", {
+            "agency": settings.agency_name, "next": next,
+            "error": "Those details did not match an account.",
+            "companies": [c for c in COMPANIES.values() if not c.is_admin][:5],
+        }, status_code=401)
+    sign_in(request, company)
+    target = next if next.startswith("/") else "/dashboard"
+    return RedirectResponse(target, status_code=303)
+
+
+@app.get("/register", response_class=HTMLResponse)
+def register_form(request: Request):
+    if current_company(request):
+        return RedirectResponse("/dashboard", status_code=303)
+    return templates.TemplateResponse(request, "register.html", {
+        "agency": settings.agency_name, "error": None, "values": {},
+    })
+
+
+@app.post("/register", response_class=HTMLResponse)
+def register(request: Request,
+             name: str = Form(""),
+             email: str = Form(""),
+             password: str = Form(""),
+             confirm: str = Form(""),
+             industry: str = Form(""),
+             location: str = Form(""),
+             website: str = Form("")):
+    values = {"name": name, "email": email, "industry": industry,
+              "location": location, "website": website}
+
+    def fail(message):
+        return templates.TemplateResponse(request, "register.html", {
+            "agency": settings.agency_name, "error": message, "values": values,
+        }, status_code=400)
+
+    if not name.strip():
+        return fail("Your company needs a name.")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return fail("That does not look like a valid email address.")
+    if len(password) < 8:
+        return fail("Choose a password of at least 8 characters.")
+    if password != confirm:
+        return fail("The two passwords did not match.")
+    if find_by_email(email):
+        return fail("An account already exists for that email address.")
+
+    company = create_company(name=name, email=email, password=password,
+                             industry=industry, location=location, website=website)
+    sign_in(request, company)
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@app.post("/logout")
+def logout(request: Request):
+    sign_out(request)
+    return RedirectResponse("/", status_code=303)
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    """Role-aware home. Admin gets the parsing workspace; employers get theirs."""
+    company, redirect = require_login(request)
+    if redirect is not None:
+        return redirect
+    if company.is_admin:
+        return workspace(request)
+    return employer_home(request, company)
+
+
+def employer_home(request: Request, company: Company):
+    my_roles = [(rid, rc) for rid, rc in ROLE_LIBRARY.items() if rc.company_id == company.id]
+    my_ids = {rid for rid, _ in my_roles}
+
+    # Candidates matched to this employer's own openings, best first.
+    matches = []
+    for run in RUNS.values():
+        for pair in run.pairs:
+            if not pair.dossier:
+                continue
+            req = run.requisitions[pair.requisition_index]
+            if req.source_role_id not in my_ids:
+                continue
+            cand = run.candidates[pair.candidate_index]
+            matches.append({
+                "dossier_id": pair.dossier_id,
+                "role_title": req.title,
+                "name": cand.name if not run.anonymise else pair.dossier_id[:8].upper(),
+                "years": cand.years,
+                "percent": pair.dossier.suitability["percent"],
+                "tone": pair.dossier.suitability["tone"],
+                "band": pair.dossier.suitability["band"],
+            })
+    matches.sort(key=lambda m: -m["percent"])
+
+    ctx = chrome("dashboard", request)
+    ctx.update({
+        "my_roles": my_roles,
+        "matches": matches,
+        "applicant_count": len(APPLICANTS),
+    })
+    return templates.TemplateResponse(request, "employer.html", ctx)
+
+
+@app.get("/workspace", response_class=HTMLResponse)
+def workspace_route(request: Request):
+    company, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
+    return workspace(request)
+
+
+def workspace(request: Request):
     _, jd_sample = _sample_paths()
 
     recent = []
@@ -151,7 +357,7 @@ def index(request: Request):
 
     best = max((d.suitability["percent"] for d in STORE.values()), default=0)
 
-    ctx = chrome("dashboard")
+    ctx = chrome("dashboard", request)
     ctx.update({
         "model_choices": available_models(),
         "sample_jd": jd_sample.read_text(encoding="utf-8") if jd_sample.exists() else "",
@@ -164,6 +370,9 @@ def index(request: Request):
 
 @app.get("/candidates", response_class=HTMLResponse)
 def candidates(request: Request):
+    company, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     rows = []
     for did, d in list(STORE.items())[::-1]:
         pct = d.suitability["percent"]
@@ -177,7 +386,7 @@ def candidates(request: Request):
             "meta": "{} of {} requirements".format(len(d.matched_requirements), len(d.assessment.requirement_matches)),
             "pill": "{}%".format(pct), "pill_tone": _tone(pct), "square": False,
         })
-    ctx = chrome("candidates")
+    ctx = chrome("candidates", request)
     ctx.update({
         "heading": "Candidates", "rows": rows,
         "empty_title": "No resumes analysed yet",
@@ -188,6 +397,9 @@ def candidates(request: Request):
 
 @app.get("/shortlists", response_class=HTMLResponse)
 def shortlists(request: Request):
+    company, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     rows = []
     for rid, r in list(RUNS.items())[::-1]:
         rows.append({
@@ -211,7 +423,7 @@ def shortlists(request: Request):
             "pill_tone": "info" if b.running else "ok",
             "square": True,
         })
-    ctx = chrome("shortlists")
+    ctx = chrome("shortlists", request)
     ctx.update({
         "heading": "Shortlists", "rows": rows,
         "empty_title": "No shortlists yet",
@@ -229,6 +441,9 @@ async def generate(
     model: Optional[str] = Form(None),
 ):
     """One CV builds a dossier; several start a batch. Same form either way."""
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     uploads = [f for f in (cv or []) if f and f.filename]
 
     if not uploads:
@@ -313,6 +528,9 @@ async def match(
     assess_all: Optional[str] = Form(None),
 ):
     """Many CVs against many roles."""
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     cv_uploads = [f for f in (cv or []) if f and f.filename]
     jd_uploads = [f for f in (jd or []) if f and f.filename]
 
@@ -406,7 +624,10 @@ def _int(raw):
 
 @app.get("/post-role", response_class=HTMLResponse)
 def post_role_form(request: Request):
-    ctx = chrome("roles")
+    company, redirect = require_login(request)
+    if redirect is not None:
+        return redirect
+    ctx = chrome("roles", request)
     ctx.update({"roles": list(ROLE_LIBRARY.items())})
     return templates.TemplateResponse(request, "post_role.html", ctx)
 
@@ -428,6 +649,9 @@ async def post_role(
     domain: str = Form(""),
     notes: str = Form(""),
 ):
+    company, redirect = require_login(request)
+    if redirect is not None:
+        return redirect
     if not role_title.strip():
         return _error(request, "The role needs a title.",
                       "Give the opening a title so it can be identified in the matrix.")
@@ -447,24 +671,41 @@ async def post_role(
         domain=domain.strip() or None,
         notes=notes.strip() or None,
     )
+    rc.company_id = company.id
     ROLE_LIBRARY[uuid.uuid4().hex[:10]] = rc
     return RedirectResponse("/roles", status_code=303)
 
 
 @app.get("/roles", response_class=HTMLResponse)
 def roles_page(request: Request):
-    ctx = chrome("roles")
+    company, redirect = require_login(request)
+    if redirect is not None:
+        return redirect
+
+    # An employer sees their own openings and nothing else. Only the agency
+    # account sees the whole board.
+    if company.is_admin:
+        roles = list(ROLE_LIBRARY.items())
+    else:
+        roles = [(rid, rc) for rid, rc in ROLE_LIBRARY.items() if rc.company_id == company.id]
+
+    ctx = chrome("roles", request)
     ctx.update({
-        "roles": list(ROLE_LIBRARY.items()),
-        "applicants": list(APPLICANTS.items()),
-        "model_choices": available_models(),
+        "roles": roles,
+        "applicants": list(APPLICANTS.items()) if company.is_admin else [],
+        "model_choices": available_models() if company.is_admin else [],
     })
     return templates.TemplateResponse(request, "roles.html", ctx)
 
 
 @app.post("/roles/{role_id}/delete")
-def delete_role(role_id: str):
-    ROLE_LIBRARY.pop(role_id, None)
+def delete_role(request: Request, role_id: str):
+    company, redirect = require_login(request)
+    if redirect is not None:
+        return redirect
+    role = ROLE_LIBRARY.get(role_id)
+    if role is not None and (company.is_admin or role.company_id == company.id):
+        ROLE_LIBRARY.pop(role_id, None)
     return RedirectResponse("/roles", status_code=303)
 
 
@@ -475,7 +716,7 @@ def delete_role(role_id: str):
 
 @app.get("/apply", response_class=HTMLResponse)
 def apply_form(request: Request):
-    ctx = chrome("apply")
+    ctx = chrome("apply", request)
     ctx.update({"roles": list(ROLE_LIBRARY.values())})
     return templates.TemplateResponse(request, "apply.html", ctx)
 
@@ -537,7 +778,7 @@ async def apply(
         "stored": stored,
     }
 
-    ctx = chrome("apply")
+    ctx = chrome("apply", request)
     ctx.update({"applicant": prefs, "roles": list(ROLE_LIBRARY.values())})
     return templates.TemplateResponse(request, "applied.html", ctx)
 
@@ -552,6 +793,9 @@ def match_library(request: Request,
     the job-description parse entirely: M calls saved before it starts, and the
     constraint gate then removes pairs before the affinity screen runs.
     """
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     if not ROLE_LIBRARY:
         return _error(request, "No open roles yet.",
                       "Post at least one role before running a match.")
@@ -570,9 +814,10 @@ def match_library(request: Request,
         anonymise=bool(anonymise),
         extraction_model=settings.extraction_model or chosen,
     )
-    for req, rc in zip(run.requisitions, ROLE_LIBRARY.values()):
+    for req, (role_id, rc) in zip(run.requisitions, ROLE_LIBRARY.items()):
         req.constraints = rc
         req.brief = brief_from_constraints(rc)
+        req.source_role_id = role_id
     for cand, applicant in zip(run.candidates, APPLICANTS.values()):
         cand.prefs = applicant["prefs"]
 
@@ -655,10 +900,13 @@ def llm_usage_stub():
 
 @app.get("/match/{run_id}", response_class=HTMLResponse)
 def match_view(request: Request, run_id: str):
+    company, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     run = RUNS.get(run_id)
     if run is None:
         raise HTTPException(404, "Match run not found. It may have been lost on server restart.")
-    ctx = chrome("shortlists")
+    ctx = chrome("shortlists", request)
     ctx.update({"run": run, "model": run.model})
     return templates.TemplateResponse(request, "match.html", ctx)
 
@@ -673,10 +921,13 @@ def match_status(run_id: str):
 
 @app.get("/batch/{batch_id}", response_class=HTMLResponse)
 def batch_view(request: Request, batch_id: str):
+    company, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
     batch = BATCHES.get(batch_id)
     if batch is None:
         raise HTTPException(404, "Batch not found. It may have been lost on server restart.")
-    ctx = chrome("shortlists")
+    ctx = chrome("shortlists", request)
     ctx.update({"batch": batch, "model": batch.model})
     return templates.TemplateResponse(request, "batch.html", ctx)
 
@@ -742,7 +993,7 @@ def review(request: Request, dossier_id: str, blind: Optional[int] = None):
     anon_name = candidate_ref(dossier)
     display = anon_name if anonymise else (view.profile.full_name or "Unnamed candidate")
 
-    ctx = chrome("candidates")
+    ctx = chrome("candidates", request)
     ctx.update({
         "dossier_id": dossier_id,
         "dossier": view,
@@ -780,7 +1031,7 @@ def pdf(dossier_id: str, blind: int = 1):
 
 
 def _error(request: Request, title: str, detail: str) -> HTMLResponse:
-    ctx = chrome("dashboard")
+    ctx = chrome("dashboard", request)
     ctx.update({"title": title, "detail": detail})
     return templates.TemplateResponse(request, "error.html", ctx, status_code=400)
 
@@ -806,7 +1057,7 @@ async def http_error(request: Request, exc: StarletteHTTPException):
     title, detail = _FRIENDLY.get(exc.status_code, ("Something went wrong", str(exc.detail)))
     if exc.status_code == 404 and exc.detail and "not found" in str(exc.detail).lower():
         detail = str(exc.detail)
-    ctx = chrome("dashboard")
+    ctx = chrome("dashboard", request)
     ctx.update({"title": title, "detail": detail})
     return templates.TemplateResponse(request, "error.html", ctx, status_code=exc.status_code)
 
@@ -815,7 +1066,7 @@ async def http_error(request: Request, exc: StarletteHTTPException):
 async def validation_error(request: Request, exc: RequestValidationError):
     if not _wants_html(request):
         return JSONResponse({"detail": exc.errors()}, status_code=422)
-    ctx = chrome("dashboard")
+    ctx = chrome("dashboard", request)
     ctx.update({
         "title": "That request did not look right",
         "detail": "One of the values in the address bar was not valid. Return to the dashboard and start again.",
@@ -829,7 +1080,7 @@ async def unhandled_error(request: Request, exc: Exception):
     log.error("unhandled error on %s: %s", request.url.path, traceback.format_exc())
     if not _wants_html(request):
         return JSONResponse({"detail": "Internal server error"}, status_code=500)
-    ctx = chrome("dashboard")
+    ctx = chrome("dashboard", request)
     ctx.update({
         "title": "Something went wrong on our side",
         "detail": "The error has been logged. Return to the dashboard and try again — "

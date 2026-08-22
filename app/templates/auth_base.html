@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ agency }}{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0F1729;--ink-2:#414B63;--ink-3:#6B7590;--ink-4:#97A1B7;
+    --bg:#F6F7FB;--surface:#FFFFFF;--surface-2:#FAFBFD;--border:#E7EAF3;--border-2:#EFF1F7;
+    --primary:#2C3A8C;--primary-600:#3D4DB7;--primary-500:#5361DA;--primary-100:#DFE3FA;--primary-50:#EFF1FE;
+    --accent:#7A6BF0;--accent-50:#F4F2FE;
+    --ok:#0E9F6E;--ok-50:#E6F6F0;--bad:#D3403F;--bad-50:#FCEDEC;--warn:#C77A08;--warn-50:#FDF4E5;
+    --font:"Inter",-apple-system,"Segoe UI",system-ui,sans-serif;
+    --sh-1:0 1px 2px rgba(15,23,41,.04),0 1px 3px rgba(15,23,41,.03);
+    --sh-2:0 2px 6px rgba(15,23,41,.05),0 6px 16px rgba(15,23,41,.05);
+    --sh-3:0 12px 34px rgba(15,23,41,.10),0 2px 6px rgba(15,23,41,.05);
+    --ease:cubic-bezier(.32,.72,.28,1);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+       font-family:var(--font);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;
+       display:grid;grid-template-rows:auto 1fr auto}
+  a{color:var(--primary-600)}
+  :focus-visible{outline:2px solid var(--primary-500);outline-offset:2px;border-radius:4px}
+  h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.028em}
+
+  header.top{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 26px}
+  .brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:var(--ink);max-width:1100px;margin:0 auto}
+  .brand .glyph{width:32px;height:32px;border-radius:9px;background:var(--primary);color:#fff;
+                display:grid;place-items:center;font-weight:800;font-size:12.5px}
+  .brand b{font-size:16px;font-weight:700;letter-spacing:-.02em}
+
+  main{display:grid;place-items:center;padding:clamp(24px,5vw,56px) 20px}
+  .panel{width:100%;max-width:var(--w,440px)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+        box-shadow:var(--sh-3);padding:clamp(24px,4vw,36px)}
+  .sub{color:var(--ink-3);font-size:14.5px;margin:8px 0 26px}
+
+  label{display:block;font-size:13px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+  input,select{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:9px;
+               font-family:var(--font);font-size:15px;background:var(--surface);color:var(--ink);
+               transition:border-color .16s var(--ease),box-shadow .16s var(--ease)}
+  input:hover{border-color:var(--ink-4)}
+  input:focus,select:focus{outline:none;border-color:var(--primary-500);box-shadow:0 0 0 3px var(--primary-50)}
+  .field+.field{margin-top:16px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .hint{font-size:12.5px;color:var(--ink-4);margin:6px 0 0}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+       padding:12px 20px;border-radius:9px;border:1px solid var(--primary);background:var(--primary);
+       color:#fff;cursor:pointer;font-family:var(--font);font-size:15px;font-weight:600;
+       transition:background .16s var(--ease),transform .16s var(--ease)}
+  .btn:hover{background:var(--primary-600);transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+
+  .alert{padding:12px 15px;border-radius:9px;font-size:14px;margin-bottom:20px;
+         background:var(--bad-50);border:1px solid #F6D4D3;color:var(--bad)}
+  .foot{margin-top:22px;text-align:center;font-size:14px;color:var(--ink-3)}
+
+  .demo-box{margin-top:20px;background:var(--surface-2);border:1px dashed var(--border);
+            border-radius:10px;padding:14px 16px;font-size:13px;color:var(--ink-3)}
+  .demo-box b{color:var(--ink-2)}
+  .demo-box code{font-family:ui-monospace,Consolas,monospace;background:rgba(15,23,41,.06);
+                 padding:1.5px 6px;border-radius:4px;color:var(--ink)}
+  .demo-box ul{margin:8px 0 0;padding-left:18px}
+  .demo-box li{margin-bottom:3px}
+
+  footer{padding:20px;text-align:center;font-size:13px;color:var(--ink-4)}
+  @media (max-width:520px){.two{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/"><span class="glyph">SD</span><b>{{ agency }}</b></a>
+</header>
+<main>{% block content %}{% endblock %}</main>
+<footer>Evidence-backed hiring. Claims link to the line they came from.</footer>
+</body>
+</html>

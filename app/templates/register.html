@@ -1,0 +1,57 @@
+{% extends "auth_base.html" %}
+{% block title %}Register your company — {{ agency }}{% endblock %}
+{% block content %}
+<div class="panel" style="--w:560px;">
+  <div class="card">
+    <h1>Register your company</h1>
+    <p class="sub">Create an account, then post as many roles as you need. Storing a role costs nothing.</p>
+
+    {% if error %}<div class="alert">{{ error }}</div>{% endif %}
+
+    <form method="post" action="/register">
+      <div class="field">
+        <label for="name">Company name *</label>
+        <input id="name" name="name" type="text" required autofocus
+               value="{{ values.name or '' }}" placeholder="Fintrail Technologies">
+      </div>
+      <div class="field">
+        <label for="email">Work email *</label>
+        <input id="email" name="email" type="email" required autocomplete="email"
+               value="{{ values.email or '' }}" placeholder="talent@fintrail.com">
+      </div>
+      <div class="field two">
+        <div>
+          <label for="password">Password *</label>
+          <input id="password" name="password" type="password" required
+                 autocomplete="new-password" minlength="8" placeholder="At least 8 characters">
+        </div>
+        <div>
+          <label for="confirm">Confirm password *</label>
+          <input id="confirm" name="confirm" type="password" required
+                 autocomplete="new-password" minlength="8" placeholder="Repeat it">
+        </div>
+      </div>
+      <div class="field two">
+        <div>
+          <label for="industry">Industry</label>
+          <input id="industry" name="industry" type="text"
+                 value="{{ values.industry or '' }}" placeholder="FinTech">
+        </div>
+        <div>
+          <label for="location">Location</label>
+          <input id="location" name="location" type="text"
+                 value="{{ values.location or '' }}" placeholder="Bengaluru">
+        </div>
+      </div>
+      <div class="field">
+        <label for="website">Website</label>
+        <input id="website" name="website" type="text"
+               value="{{ values.website or '' }}" placeholder="fintrail.com">
+      </div>
+      <div class="field"><button class="btn" type="submit">Create account</button></div>
+    </form>
+
+    <p class="foot">Already registered? <a href="/login">Sign in</a></p>
+  </div>
+</div>
+{% endblock %}

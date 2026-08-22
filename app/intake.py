@@ -65,6 +65,9 @@ class RoleConstraints(BaseModel):
 
     role_title: str
     client_name: Optional[str] = None
+    # Which account owns this opening. Roles are scoped by it so an
+    # employer only ever sees their own.
+    company_id: Optional[str] = None
     location: Optional[str] = None
     work_mode: str = "any"
 

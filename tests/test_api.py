@@ -18,7 +18,17 @@ JSON = {"accept": "application/json"}
 
 @pytest.fixture(scope="module")
 def client():
+    """Signed in as the agency account.
+
+    Every workspace surface is behind the single sign-in now, so these route
+    tests need a session. Public pages are covered in test_accounts.py.
+    """
+    from app.accounts import ADMIN_EMAIL, ADMIN_PASSWORD, seed
+    seed()
     with TestClient(app) as c:
+        r = c.post("/login", data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+                   follow_redirects=False)
+        assert r.status_code == 303, "could not sign in for route tests"
         yield c
 
 
@@ -32,12 +42,18 @@ def demo_id(client):
 # --- pages render ----------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/", "/candidates", "/shortlists"])
-def test_pages_render(client, path):
+@pytest.mark.parametrize("path", ["/dashboard", "/candidates", "/shortlists", "/roles"])
+def test_workspace_pages_render(client, path):
     r = client.get(path, headers=HTML)
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "SpireDossier" in r.text
+
+
+def test_landing_renders_for_everyone(client):
+    r = client.get("/", headers=HTML)
+    assert r.status_code == 200
+    assert "Stellaspire" in r.text
 
 
 def test_health(client):
@@ -47,7 +63,7 @@ def test_health(client):
 
 
 def test_every_page_declares_a_mobile_viewport(client):
-    for path in ["/", "/candidates", "/shortlists"]:
+    for path in ["/", "/login", "/register", "/apply", "/dashboard", "/candidates", "/shortlists"]:
         assert 'name="viewport"' in client.get(path, headers=HTML).text
 
 

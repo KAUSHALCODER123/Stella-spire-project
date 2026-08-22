@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{{ company.name }} — dashboard{% endblock %}
+
+{% block head %}
+<style>
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin-bottom:20px}
+  .sc{padding:18px 20px}
+  .sc .v{font-size:25px;font-weight:700;letter-spacing:-.028em;line-height:1.1}
+  .sc .k{font-size:12.5px;color:var(--ink-3);margin-top:3px}
+
+  .split{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;align-items:start}
+
+  .mrow{display:flex;align-items:center;gap:14px;padding:13px 20px;
+        border-bottom:1px solid var(--border-2);text-decoration:none;color:inherit;
+        transition:background .16s var(--ease)}
+  .mrow:last-child{border-bottom:none}
+  .mrow:hover{background:var(--surface-2)}
+  .mrow .av{width:36px;height:36px;border-radius:50%;flex:none;display:grid;place-items:center;
+            background:var(--accent-50);color:var(--accent);font-size:12px;font-weight:700}
+  .mrow .n{flex:1;min-width:0}
+  .mrow .n b{display:block;font-size:14px;font-weight:600}
+  .mrow .n span{font-size:12px;color:var(--ink-4)}
+
+  .rolecard{padding:16px 20px;border-bottom:1px solid var(--border-2)}
+  .rolecard:last-child{border-bottom:none}
+  .rolecard .t{font-size:15px;font-weight:600}
+  .rolecard .c{font-size:12.5px;color:var(--ink-4);margin-top:1px}
+  .facts{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+  .reqs{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+
+  .empty{padding:44px 20px;text-align:center}
+  .empty .t{font-size:15px;font-weight:600}
+  .empty .d{font-size:13.5px;color:var(--ink-4);margin:6px 0 18px}
+
+  @media (max-width:1000px){.split{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+
+{% block chrome %}
+<div class="topbar">
+  <div>
+    <div class="crumb">{{ company.industry or 'Employer' }}{% if company.location %} · {{ company.location }}{% endif %}</div>
+    <h1>{{ company.name }}</h1>
+  </div>
+  <div class="acts">
+    <a class="btn ghost" href="/apply">Application form</a>
+    <a class="btn" href="/post-role">Post a role</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  <div class="stats">
+    <div class="card sc reveal">
+      <div class="v num">{{ my_roles | length }}</div>
+      <div class="k">Your open roles</div>
+    </div>
+    <div class="card sc reveal">
+      <div class="v num">{{ matches | length }}</div>
+      <div class="k">Candidates matched</div>
+    </div>
+    <div class="card sc reveal">
+      <div class="v num">{{ matches[0].percent if matches else 0 }}{% if matches %}%{% endif %}</div>
+      <div class="k">Best match score</div>
+    </div>
+    <div class="card sc reveal">
+      <div class="v num">{{ applicant_count }}</div>
+      <div class="k">CVs in the pool</div>
+    </div>
+  </div>
+
+  <div class="split">
+
+    <div class="card reveal">
+      <div class="card-head">
+        <h2>Candidates matched to your roles</h2>
+        <span class="hint">Best fit first</span>
+      </div>
+      <div>
+        {% for m in matches %}
+        <a class="mrow" href="/dossier/{{ m.dossier_id }}">
+          <span class="av">{{ m.name[:2] | upper }}</span>
+          <span class="n">
+            <b>{{ m.name }}</b>
+            <span>{{ m.role_title }} · {{ m.years }}y experience</span>
+          </span>
+          <span class="pill {{ m.tone }}">{{ m.percent }}%</span>
+        </a>
+        {% else %}
+        <div class="empty">
+          <div class="t">No matches yet</div>
+          <div class="d">
+            {% if my_roles %}
+              Your roles are live. {{ agency }} will run matching against the candidate
+              pool and results appear here.
+            {% else %}
+              Post a role first, and candidates will be matched against it.
+            {% endif %}
+          </div>
+          {% if not my_roles %}<a class="btn" href="/post-role">Post a role</a>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="card reveal">
+      <div class="card-head">
+        <h2>Your roles</h2>
+        <span class="hint">{{ my_roles | length }}</span>
+      </div>
+      <div>
+        {% for rid, r in my_roles %}
+        <div class="rolecard">
+          <div class="t">{{ r.role_title }}</div>
+          <div class="c">{{ r.location or 'Location flexible' }}{% if r.work_mode and r.work_mode != 'any' %} · {{ r.work_mode }}{% endif %}</div>
+          <div class="facts">
+            {% if r.min_years %}<span class="pill plain">{{ r.min_years | int }}+ yrs</span>{% endif %}
+            {% if r.ctc_min_lpa or r.ctc_max_lpa %}
+              <span class="pill plain">{{ r.ctc_min_lpa or '?' }}–{{ r.ctc_max_lpa or '?' }} LPA</span>{% endif %}
+            {% if r.max_notice_days %}<span class="pill plain">≤{{ r.max_notice_days }}d notice</span>{% endif %}
+            {% if r.domain %}<span class="pill accent">{{ r.domain }}</span>{% endif %}
+          </div>
+          {% if r.must_have_skills %}
+          <div class="reqs">
+            {% for s in r.must_have_skills[:5] %}<span class="chip solid">{{ s }}</span>{% endfor %}
+            {% if r.must_have_skills|length > 5 %}<span class="chip ghost">+{{ r.must_have_skills|length - 5 }}</span>{% endif %}
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="empty">
+          <div class="t">No roles posted</div>
+          <div class="d">Describing a role takes a minute and costs nothing to store.</div>
+          <a class="btn" href="/post-role">Post your first role</a>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
