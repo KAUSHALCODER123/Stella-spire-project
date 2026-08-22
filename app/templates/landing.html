@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ agency }} — evidence-backed hiring</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/logo.svg" color="#2C3A8C">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -39,8 +41,10 @@
   nav .inner{display:flex;align-items:center;justify-content:space-between;gap:20px;height:66px}
   .brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:var(--ink)}
   .brand .glyph{width:34px;height:34px;border-radius:10px;background:var(--primary);color:#fff;
-                display:grid;place-items:center;font-weight:800;font-size:13px;
-                box-shadow:0 2px 8px rgba(44,58,140,.3)}
+                display:grid;place-items:center;box-shadow:0 2px 8px rgba(44,58,140,.3)}
+  .mark{width:20px;height:20px;display:block}
+  /* On the hero the mark stands alone, larger and unboxed. */
+  .hero .eyebrow .mark{width:13px;height:13px;color:var(--primary)}
   .brand b{font-size:17px;font-weight:700;letter-spacing:-.02em}
   .navlinks{display:flex;align-items:center;gap:9px}
   .navlinks a.text{color:var(--ink-2);text-decoration:none;font-size:14.5px;font-weight:500;padding:8px 12px;border-radius:8px}
@@ -175,7 +179,7 @@
 
 <nav>
   <div class="wrap inner">
-    <a class="brand" href="/"><span class="glyph">SD</span><b>{{ agency }}</b></a>
+    <a class="brand" href="/"><span class="glyph"><svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path fill="currentColor" d="M20 1C21 13 22.6 17.6 27.4 19C22.6 20.4 21 25 20 39C19 25 17.4 20.4 12.6 19C17.4 17.6 19 13 20 1Z"/></svg></span><b>{{ agency }}</b></a>
     <div class="navlinks">
       <a class="text" href="#how">How it works</a>
       <a class="text" href="#roles">Open roles</a>
@@ -192,7 +196,7 @@
 <header class="hero">
   <div class="wrap grid">
     <div>
-      <span class="eyebrow"><span class="dot"></span>Evidence-backed candidate screening</span>
+      <span class="eyebrow"><svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path fill="currentColor" d="M20 1C21 13 22.6 17.6 27.4 19C22.6 20.4 21 25 20 39C19 25 17.4 20.4 12.6 19C17.4 17.6 19 13 20 1Z"/></svg>Evidence-backed candidate screening</span>
       <h1 class="big">Every hiring judgement,<br>traced to <em>the line it came from</em>.</h1>
       <p class="lede">
         {{ agency }} reads CVs against your brief and returns a ranked shortlist where

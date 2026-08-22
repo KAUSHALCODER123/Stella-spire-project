@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" role="img" aria-label="Stellaspire">
+  <title>Stellaspire</title>
+  <!-- One shape read two ways. A four-pointed star (stella) whose vertical
+       axis is stretched until it reads as a spire. Concave sides keep it a
+       star rather than a diamond; the elongation keeps it from being the
+       generic AI sparkle. Holds legibly down to 16px. -->
+  <path fill="currentColor"
+        d="M20 1
+           C21 13 22.6 17.6 27.4 19
+           C22.6 20.4 21 25 20 39
+           C19 25 17.4 20.4 12.6 19
+           C17.4 17.6 19 13 20 1 Z"/>
+</svg>

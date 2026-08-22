@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}SpireDossier{% endblock %}</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="mask-icon" href="/static/logo.svg" color="#2C3A8C">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -98,9 +100,10 @@
   .brand .glyph {
     width: 32px; height: 32px; border-radius: 9px; flex: none;
     background: var(--primary); color: #fff;
-    display: grid; place-items: center; font-weight: 700; font-size: 13px;
+    display: grid; place-items: center;
     box-shadow: 0 2px 6px rgba(44,58,140,.28);
   }
+  .mark { width: 19px; height: 19px; display: block; }
   .brand .t { line-height: 1.2; }
   .brand .t b { display: block; font-size: 15px; font-weight: 600; color: var(--ink); letter-spacing: -.012em; }
   .brand .t span { font-size: 11px; color: var(--ink-4); }
@@ -340,7 +343,7 @@
 
   <aside class="side">
     <a class="brand" href="{{ '/dashboard' if company else '/' }}">
-      <span class="glyph">SD</span>
+      <span class="glyph"><svg class="mark" viewBox="0 0 40 40" fill="none" aria-hidden="true"><path fill="currentColor" d="M20 1C21 13 22.6 17.6 27.4 19C22.6 20.4 21 25 20 39C19 25 17.4 20.4 12.6 19C17.4 17.6 19 13 20 1Z"/></svg></span>
       <span class="t"><b>SpireDossier</b><span>{{ agency }}</span></span>
     </a>
 
