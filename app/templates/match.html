@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+{% block title %}{{ run.requisitions | length }} roles × {{ run.candidates | length }} candidates{% endblock %}
+
+{% block head %}
+<style>
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 16px; margin-bottom: 18px; }
+  .sc { padding: 17px 19px; }
+  .sc .v { font-size: 24px; font-weight: 700; letter-spacing: -.028em; line-height: 1.1; }
+  .sc .k { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+  .sc .n { font-size: 12px; color: var(--ok); margin-top: 4px; font-weight: 600; }
+
+  /* ---------- progress ---------- */
+  .runbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .runbar .count { font-size: 18px; font-weight: 700; }
+  .runbar .b { flex: 1; min-width: 190px; }
+  .phases { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+  .ph {
+    font-size: 12px; font-weight: 600; padding: 5px 11px; border-radius: 999px;
+    background: var(--surface-2); color: var(--ink-4); border: 1px solid var(--border);
+  }
+  .ph.done { background: var(--ok-50); color: var(--ok); border-color: #CCEBE0; }
+  .ph.now  { background: var(--primary-50); color: var(--primary); border-color: var(--primary-100);
+             animation: pulse-soft 1.3s ease-in-out infinite; }
+
+  /* ---------- the matrix ---------- */
+  .matrix { width: 100%; border-collapse: separate; border-spacing: 0; }
+  .matrix th, .matrix td { padding: 0; }
+  .matrix thead th {
+    position: sticky; top: 0; background: var(--surface); z-index: 2;
+    padding: 10px 8px; border-bottom: 1px solid var(--border);
+    font-size: 11.5px; font-weight: 600; color: var(--ink-3);
+    text-align: center; vertical-align: bottom; min-width: 92px;
+  }
+  .matrix thead th.corner { text-align: left; min-width: 210px; z-index: 3; left: 0; }
+  .matrix thead th .client { display: block; font-weight: 400; font-size: 10.5px; color: var(--ink-4); margin-top: 2px; }
+  .matrix tbody th {
+    position: sticky; left: 0; background: var(--surface); z-index: 1;
+    text-align: left; padding: 10px 12px 10px 4px; border-bottom: 1px solid var(--border-2);
+    font-weight: 600; font-size: 13.5px; min-width: 210px;
+  }
+  .matrix tbody th span { display: block; font-weight: 400; font-size: 11.5px; color: var(--ink-4); margin-top: 1px; }
+  .matrix tbody td { border-bottom: 1px solid var(--border-2); text-align: center; padding: 6px 5px; }
+
+  .cell {
+    display: block; width: 100%; border-radius: var(--r-sm); padding: 9px 6px;
+    text-decoration: none; font-weight: 700; font-size: 14px; border: 1px solid transparent;
+    transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  }
+  a.cell:hover { transform: translateY(-1px); box-shadow: var(--sh-2); }
+  .cell small { display: block; font-size: 10px; font-weight: 600; letter-spacing: .04em; margin-top: 2px; opacity: .8; }
+  .cell.ok   { background: var(--ok-50);   color: var(--ok);   border-color: #CCEBE0; }
+  .cell.warn { background: var(--warn-50); color: var(--warn); border-color: #F5E3C2; }
+  .cell.bad  { background: var(--bad-50);  color: var(--bad);  border-color: #F6D4D3; }
+  /* Screened-only cells are visually quieter: an affinity guess and a real
+     assessment must never look like the same kind of number. */
+  .cell.screened { background: var(--surface-2); color: var(--ink-4); border-style: dashed; border-color: var(--border); font-weight: 600; }
+  .cell.none { color: var(--ink-4); opacity: .45; font-weight: 400; font-size: 12px; padding: 12px 6px; }
+  .cell.err { background: var(--bad-50); color: var(--bad); font-size: 11px; font-weight: 600; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-3); margin-top: 14px; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ---------- role shortlists ---------- */
+  .role + .role { margin-top: 14px; }
+  .rrow {
+    display: flex; align-items: center; gap: 13px; padding: 11px 20px;
+    border-bottom: 1px solid var(--border-2); text-decoration: none; color: inherit;
+    transition: background var(--fast) var(--ease);
+  }
+  .rrow:last-child { border-bottom: none; }
+  .rrow:hover { background: var(--surface-2); }
+  .rrow .pos { width: 24px; height: 24px; border-radius: 7px; flex: none; display: grid; place-items: center;
+               background: var(--surface-2); color: var(--ink-3); font-size: 12px; font-weight: 700; }
+  .rrow:first-child .pos { background: var(--primary); color: #fff; }
+  .rrow .n { flex: 1; min-width: 0; }
+  .rrow .n b { display: block; font-size: 13.5px; font-weight: 600; }
+  .rrow .n span { font-size: 11.5px; color: var(--ink-4); }
+  .tagrow { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .failrow { padding: 11px 20px; border-bottom: 1px solid var(--border-2); font-size: 13.5px; }
+  .failrow:last-child { border-bottom: none; }
+  .failrow span { color: var(--bad); }
+
+  @media (max-width: 900px) {
+    .matrix thead th.corner, .matrix tbody th { min-width: 150px; }
+  }
+</style>
+{% endblock %}
+
+{% block chrome %}
+<div class="topbar">
+  <div>
+    <div class="crumb"><a href="/shortlists" style="color:inherit;">Shortlists</a> / Role matching</div>
+    <h1>{{ run.requisitions | length }} role{{ '' if run.requisitions|length == 1 else 's' }}
+        × {{ run.candidates | length }} candidate{{ '' if run.candidates|length == 1 else 's' }}</h1>
+    <div class="hint" style="margin-top:2px;" id="phase-label">
+      {% if run.running %}Working…{% else %}{{ run.assessed_pairs | length }} full assessments in {{ run.elapsed | int }}s{% endif %}
+    </div>
+  </div>
+  <div class="acts"><a class="btn" href="/">New analysis</a></div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page">
+
+  {% if run.error %}
+  <div class="notice warn reveal" style="margin-bottom:16px;">{{ run.error }}</div>
+  {% endif %}
+
+  <!-- ======================= RUNNING ======================= -->
+  <div id="progress" class="card reveal" {% if not run.running %}hidden{% endif %}>
+    <div class="card-head">
+      <h2>Matching in progress</h2>
+      <span class="hint"><span id="clock" class="num">{{ run.elapsed | int }}</span>s elapsed</span>
+    </div>
+    <div class="card-body">
+      <div class="runbar">
+        <span class="count num"><span id="done-count">{{ run.completed }}</span>/<span id="total-count">{{ run.total_steps }}</span></span>
+        <span class="b bar"><i id="fill" style="width: {{ run.percent }}%"></i></span>
+        <span class="spinner" id="spin"></span>
+      </div>
+      <div class="phases" id="phases">
+        <span class="ph" data-ph="briefs">Reading roles</span>
+        <span class="ph" data-ph="extracting">Parsing CVs</span>
+        <span class="ph" data-ph="screening">Screening pairs</span>
+        <span class="ph" data-ph="assessing">Assessing matches</span>
+      </div>
+      <p class="hint" style="margin:13px 0 0;">
+        Each CV is read once and each role once. Only the pairs that survive screening
+        get a full assessment, which is what keeps this from costing a cross product.
+      </p>
+    </div>
+  </div>
+
+  <!-- ======================= FINISHED ======================= -->
+  {% if not run.running %}
+  {% set cost = run.cost() %}
+
+  <div class="summary">
+    <div class="card sc reveal">
+      <div class="v num">{{ run.requisitions | length }}</div>
+      <div class="k">Roles</div>
+    </div>
+    <div class="card sc reveal">
+      <div class="v num">{{ run.candidates | length }}</div>
+      <div class="k">Candidates</div>
+    </div>
+    <div class="card sc reveal">
+      <div class="v num">{{ run.assessed_pairs | length }}</div>
+      <div class="k">Full assessments</div>
+    </div>
+    <div class="card sc reveal">
+      <div class="v num">{{ cost.total }}</div>
+      <div class="k">Model calls</div>
+      {% if cost.naive_total > cost.total %}
+      <div class="n">{{ cost.naive_total - cost.total }} saved by screening</div>
+      {% endif %}
+    </div>
+    <div class="card sc reveal">
+      <div class="v num">{{ run.elapsed | int }}s</div>
+      <div class="k">Total time</div>
+    </div>
+  </div>
+
+  <!-- ---------- matrix ---------- -->
+  <div class="card reveal" style="margin-bottom:18px;">
+    <div class="card-head">
+      <h2>Match matrix</h2>
+      <span class="hint">Every candidate against every role</span>
+    </div>
+    <div class="card-body">
+      <div class="scroll-x">
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th class="corner">Candidate</th>
+              {% for req in run.requisitions %}
+              <th>
+                {{ req.title }}
+                <span class="client">{{ req.client }}</span>
+              </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for cand in run.candidates %}
+            <tr>
+              <th>
+                {{ cand.name }}
+                <span>{% if cand.ok %}{{ cand.years }}y · {{ cand.filename }}{% else %}Could not be read{% endif %}</span>
+              </th>
+              {% for req in run.requisitions %}
+              {% set pair = run.pair(cand.index, req.index) %}
+              <td>
+                {% if not cand.ok or not req.ok %}
+                  <span class="cell none">—</span>
+                {% elif pair and pair.dossier %}
+                  {% set su = pair.dossier.suitability %}
+                  <a class="cell {{ su.tone }}" href="/dossier/{{ pair.dossier_id }}"
+                     title="{{ su.band }} — {{ pair.dossier.matched_requirements|length }} of {{ pair.dossier.assessment.requirement_matches|length }} requirements met">
+                    {{ su.percent }}%<small>ASSESSED</small>
+                  </a>
+                {% elif pair and pair.status == 'failed' %}
+                  <span class="cell err" title="{{ pair.error }}">failed</span>
+                {% elif pair %}
+                  <span class="cell screened" title="{{ pair.reason }}">
+                    {{ pair.affinity.percent }}%<small>SCREENED</small>
+                  </span>
+                {% else %}
+                  <span class="cell none">—</span>
+                {% endif %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--ok-50);border:1px solid #CCEBE0;"></i>Assessed — a real match score, click to open</span>
+        <span><i style="background:var(--surface-2);border:1px dashed var(--border);"></i>Screened only — affinity estimate, not assessed</span>
+        <span><i style="background:var(--bad-50);border:1px solid #F6D4D3;"></i>Failed</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- per-role shortlists ---------- -->
+  {% for req in run.requisitions %}
+  {% set rows = run.shortlist_for(req.index) %}
+  <div class="card reveal role">
+    <div class="card-head">
+      <h2>{{ req.title }}</h2>
+      <span class="hint">{{ req.client }}{% if rows %} · {{ rows|length }} matched{% endif %}</span>
+    </div>
+    {% if not req.ok %}
+      <div class="card-body"><div class="notice warn">This role could not be read: {{ req.error }}</div></div>
+    {% elif not rows %}
+      <div class="card-body hint">No candidate in this batch overlapped enough with this role to be worth assessing.</div>
+    {% else %}
+      <div>
+        {% for pair in rows %}
+        {% set cand = run.candidates[pair.candidate_index] %}
+        {% if pair.dossier %}
+        <a class="rrow" href="/dossier/{{ pair.dossier_id }}">
+          <span class="pos">{{ loop.index }}</span>
+          <span class="n"><b>{{ cand.name }}</b><span>{{ cand.years }}y · {{ cand.filename }}</span></span>
+          <span class="pill {{ pair.dossier.suitability.tone }}">{{ pair.dossier.suitability.percent }}%</span>
+        </a>
+        {% else %}
+        <div class="rrow" style="cursor:default;">
+          <span class="pos">{{ loop.index }}</span>
+          <span class="n"><b>{{ cand.name }}</b><span>{{ pair.reason }}</span></span>
+          <span class="pill plain">{{ pair.affinity.percent }}% screened</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- ---------- candidate role tags ---------- -->
+  <div class="card reveal" style="margin-top:18px;">
+    <div class="card-head">
+      <h2>Candidates, tagged by role</h2>
+      <span class="hint">Which openings each person fits</span>
+    </div>
+    <div>
+      {% for cand in run.candidates %}
+      <div class="rrow" style="cursor:default; align-items:flex-start;">
+        <span class="n" style="max-width:230px;">
+          <b>{{ cand.name }}</b>
+          <span>{% if cand.ok %}{{ cand.years }}y experience{% else %}Could not be read{% endif %}</span>
+        </span>
+        <span class="tagrow" style="flex:1;">
+          {% for pair in run.roles_for(cand.index) %}
+            {% set req = run.requisitions[pair.requisition_index] %}
+            {% if pair.dossier %}
+              <a href="/dossier/{{ pair.dossier_id }}" class="chip {{ 'ok' if pair.dossier.suitability.tone == 'ok' else ('warn' if pair.dossier.suitability.tone == 'warn' else 'bad') }}"
+                 style="text-decoration:none;">{{ req.title }} · {{ pair.dossier.suitability.percent }}%</a>
+            {% else %}
+              <span class="chip ghost" title="{{ pair.reason }}">{{ req.title }} · {{ pair.affinity.percent }}%</span>
+            {% endif %}
+          {% else %}
+            <span class="hint">{% if cand.ok %}No role in this batch matched.{% else %}{{ cand.error }}{% endif %}</span>
+          {% endfor %}
+        </span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {% set broken = run.candidates | rejectattr('ok') | list %}
+  {% if broken %}
+  <div class="card reveal" style="margin-top:18px;">
+    <div class="card-head"><h2>Could not process</h2><span class="hint">{{ broken|length }}</span></div>
+    <div>
+      {% for c in broken %}
+      <div class="failrow"><b>{{ c.filename }}</b> — <span>{{ c.error }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  var running = {{ 'true' if run.running else 'false' }};
+  var id = "{{ run.id }}";
+  var ORDER = ["briefs", "extracting", "screening", "assessing"];
+  if (!running) return;
+
+  function paint(d) {
+    document.getElementById("done-count").textContent = d.completed;
+    document.getElementById("total-count").textContent = d.total;
+    document.getElementById("fill").style.width = d.percent + "%";
+    document.getElementById("clock").textContent = Math.round(d.elapsed);
+
+    var at = ORDER.indexOf(d.phase);
+    document.querySelectorAll(".ph").forEach(function (el) {
+      var i = ORDER.indexOf(el.dataset.ph);
+      el.classList.toggle("done", at > i || d.phase === "done");
+      el.classList.toggle("now", at === i && d.phase !== "done");
+    });
+
+    var label = document.getElementById("phase-label");
+    if (label) {
+      label.textContent = d.phase === "assessing"
+        ? "Assessing " + d.selected + " matched pairs…"
+        : d.phase === "screening" ? "Screening every pair…"
+        : d.phase === "extracting" ? "Parsing CVs…"
+        : d.phase === "briefs" ? "Reading job descriptions…" : "Working…";
+    }
+
+    if (!d.running) {
+      var s = document.getElementById("spin");
+      if (s) s.remove();
+      setTimeout(function () { window.location.reload(); }, 520);
+    }
+  }
+
+  (function poll() {
+    fetch("/match/" + id + "/status")
+      .then(function (r) { return r.json(); })
+      .then(function (d) { paint(d); if (d.running) setTimeout(poll, 1100); })
+      .catch(function () { setTimeout(poll, 2500); });
+  })();
+})();
+</script>
+{% endblock %}

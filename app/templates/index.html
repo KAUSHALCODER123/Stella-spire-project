@@ -223,12 +223,26 @@
       <div class="grid" style="gap:18px;">
         <div class="card reveal">
           <div class="card-head">
-            <h2>Job description</h2>
-            <span class="pill info">Pre-filled with sample</span>
+            <h2>Roles</h2>
+            <span class="pill info">One or many</span>
           </div>
           <div class="card-body">
-            <label class="field-label" for="jd">Paste the client brief</label>
-            <textarea id="jd" name="jd_text" placeholder="Paste the full job description…">{{ sample_jd }}</textarea>
+            <div class="drop" id="jddrop" style="padding:22px 18px;">
+              <input id="jdfiles" type="file" name="jd" accept=".pdf,.docx,.txt,.md" multiple>
+              <div id="jd-prompt">
+                <div class="big" style="font-size:14px;">Drop job descriptions here, or <u>browse</u></div>
+                <div class="small">One file per role. Upload several to match every CV against every opening.</div>
+              </div>
+              <div class="filelist" id="jdlist" hidden></div>
+              <div class="filebar" id="jdbar" hidden>
+                <span id="jdsummary"></span>
+                <button type="button" class="linkish" id="jdclear">Clear all</button>
+              </div>
+            </div>
+            <div class="batch-note" id="matrixnote" hidden></div>
+
+            <label class="field-label" for="jd" style="margin-top:16px;">Or paste a single brief</label>
+            <textarea id="jd" name="jd_text" style="min-height:150px;" placeholder="Paste the full job description…">{{ sample_jd }}</textarea>
             <p class="hint" style="margin:9px 0 0;">Requirements are extracted automatically and matched one by one against each CV.</p>
           </div>
         </div>
@@ -395,7 +409,79 @@
                        (n > 1 ? "Starting analysis…" : "Analysing…");
   });
 
+  // ---- job description files: one file per role ----
+  var jdInput = document.getElementById("jdfiles");
+  var jdDrop = document.getElementById("jddrop");
+  var jdPrompt = document.getElementById("jd-prompt");
+  var jdList = document.getElementById("jdlist");
+  var jdBar = document.getElementById("jdbar");
+  var jdSummary = document.getElementById("jdsummary");
+  var jdClear = document.getElementById("jdclear");
+  var matrixNote = document.getElementById("matrixnote");
+  var jdText = document.getElementById("jd");
+  var form = input.closest("form");
+
+  function renderJds() {
+    var files = Array.prototype.slice.call(jdInput.files || []);
+    var n = files.length;
+    jdPrompt.hidden = n > 0;
+    jdList.hidden = n === 0;
+    jdBar.hidden = n === 0;
+    jdDrop.classList.toggle("has-files", n > 0);
+
+    jdList.innerHTML = files.map(function (f, i) {
+      var ext = (f.name.split(".").pop() || "?").toUpperCase().slice(0, 4);
+      return '<div class="frow" style="animation-delay:' + (i * 0.03) + 's">' +
+             '<span class="ft">' + esc(ext) + "</span>" +
+             '<span class="n">' + esc(f.name) + "</span>" +
+             '<span class="s">' + fmt(f.size) + "</span></div>";
+    }).join("");
+    jdSummary.textContent = n + (n === 1 ? " role" : " roles");
+
+    // Several roles means the many-to-many matcher, which is a different route.
+    var cvCount = (input.files || []).length;
+    var multi = n >= 1;
+    form.action = multi ? "/match" : "/generate";
+    matrixNote.hidden = !(n >= 2);
+    if (n >= 2) {
+      var pasted = jdText.value.trim() ? 1 : 0;
+      var roles = n + pasted;
+      matrixNote.textContent = roles + " roles x " + Math.max(cvCount, 1) + " candidates. Each CV is read once and " +
+        "each role once, then only the pairs that survive screening get a full assessment.";
+    }
+    updateSubmit();
+  }
+
+  function updateSubmit() {
+    var cvN = (input.files || []).length;
+    var jdN = (jdInput.files || []).length;
+    if (!submit) return;
+    if (jdN >= 1) {
+      submit.textContent = "Match " + (cvN || "") + (cvN === 1 ? " CV" : " CVs") + " to " + jdN +
+                           (jdN === 1 ? " role" : " roles");
+    } else {
+      submit.textContent = cvN > 1 ? "Analyse " + cvN + " CVs" : "Analyse CV";
+    }
+  }
+
+  jdInput.addEventListener("change", renderJds);
+  jdClear.addEventListener("click", function (e) {
+    e.preventDefault(); e.stopPropagation();
+    jdInput.value = ""; renderJds();
+  });
+  ["dragenter", "dragover"].forEach(function (evt) {
+    jdDrop.addEventListener(evt, function (e) { e.preventDefault(); jdDrop.classList.add("is-over"); });
+  });
+  ["dragleave", "drop"].forEach(function (evt) {
+    jdDrop.addEventListener(evt, function (e) { e.preventDefault(); jdDrop.classList.remove("is-over"); });
+  });
+  jdDrop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files.length) { jdInput.files = e.dataTransfer.files; renderJds(); }
+  });
+  input.addEventListener("change", updateSubmit);
+
   render();
+  renderJds();
 })();
 </script>
 {% endblock %}

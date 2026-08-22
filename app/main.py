@@ -27,10 +27,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.templating import Jinja2Templates
 
 from app.batch import BATCHES, create_batch, run_batch, status_payload
+from app.matchrun import RUNS, create_run, execute as execute_run
+from app.matchrun import status_payload as run_status
 from app.extract.llm import LLMError
 from app.config import MODEL_CHOICES, settings
 from app.uploads import display_filename, safe_filename, upload_suffix
-from app.extract.documents import SUPPORTED_SUFFIXES
+from app.extract.documents import SUPPORTED_SUFFIXES, extract_text
 from app.pipeline import Dossier, build_dossier
 from app.render.dossier import COMPUTED_KINDS, _skills_by_category, candidate_ref, render_html, render_pdf
 from app.render.source import render_source
@@ -65,7 +67,7 @@ def chrome(nav: str) -> dict:
         "model": settings.model,
         "has_key": _has_key(),
         "nav": nav,
-        "nav_counts": {"candidates": len(STORE), "shortlists": len(BATCHES)},
+        "nav_counts": {"candidates": len(STORE), "shortlists": len(BATCHES) + len(RUNS)},
     }
 
 
@@ -170,6 +172,17 @@ def candidates(request: Request):
 @app.get("/shortlists", response_class=HTMLResponse)
 def shortlists(request: Request):
     rows = []
+    for rid, r in list(RUNS.items())[::-1]:
+        rows.append({
+            "href": "/match/{}".format(rid),
+            "badge": "{}x{}".format(len(r.requisitions), len(r.candidates)),
+            "title": "{} roles x {} candidates".format(len(r.requisitions), len(r.candidates)),
+            "subtitle": ", ".join(q.title for q in r.requisitions[:3]) or "Reading briefs...",
+            "meta": "{}s".format(int(r.elapsed)),
+            "pill": "Running" if r.running else "Done",
+            "pill_tone": "info" if r.running else "ok",
+            "square": True,
+        })
     for bid, b in list(BATCHES.items())[::-1]:
         rows.append({
             "href": "/batch/{}".format(bid),
@@ -268,6 +281,170 @@ async def generate(
     dossier.anonymise = bool(anonymise)  # type: ignore[attr-defined]
     STORE[dossier_id] = dossier
     return RedirectResponse("/dossier/{}".format(dossier_id), status_code=303)
+
+
+@app.post("/match")
+async def match(
+    request: Request,
+    cv: List[UploadFile] = File(default=[]),
+    jd: List[UploadFile] = File(default=[]),
+    jd_text: str = Form(""),
+    anonymise: Optional[str] = Form(None),
+    model: Optional[str] = Form(None),
+    top_roles: int = Form(3),
+    assess_all: Optional[str] = Form(None),
+):
+    """Many CVs against many roles."""
+    cv_uploads = [f for f in (cv or []) if f and f.filename]
+    jd_uploads = [f for f in (jd or []) if f and f.filename]
+
+    if not cv_uploads:
+        return _error(request, "No CVs uploaded.", "Add at least one CV to match against the roles.")
+    if not jd_uploads and not jd_text.strip():
+        return _error(request, "No roles provided.",
+                      "Upload one or more job description files, or paste a single brief.")
+    if not _has_key():
+        return _error(request, "No API key configured.",
+                      "Copy .env.example to .env, add your OPENAI_API_KEY, then restart the server.")
+
+    # --- roles -----------------------------------------------------------
+    jds: List[tuple] = []
+    for upload in jd_uploads:
+        if upload_suffix(upload.filename) not in SUPPORTED_SUFFIXES:
+            return _error(request, "Unsupported job description: {}".format(upload.filename),
+                          "Supported formats are {}.".format(", ".join(sorted(SUPPORTED_SUFFIXES))))
+        payload = await upload.read()
+        if len(payload) > MAX_UPLOAD_BYTES:
+            return _error(request, "Job description too large: {}".format(upload.filename),
+                          "The limit is 10 MB per file.")
+        path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], safe_filename(upload.filename))
+        path.write_bytes(payload)
+        try:
+            text = extract_text(path).text
+        except Exception as exc:  # noqa: BLE001
+            return _error(request, "Could not read {}".format(display_filename(upload.filename)), str(exc))
+        if not text.strip():
+            return _error(request, "Empty job description: {}".format(display_filename(upload.filename)),
+                          "That file contained no readable text.")
+        jds.append((display_filename(upload.filename), text))
+
+    if jd_text.strip():
+        jds.append(("Pasted brief", jd_text))
+
+    # --- candidates -------------------------------------------------------
+    cvs: List[tuple] = []
+    for upload in cv_uploads:
+        if upload_suffix(upload.filename) not in SUPPORTED_SUFFIXES:
+            return _error(request, "Unsupported file: {}".format(upload.filename),
+                          "Supported formats are {}.".format(", ".join(sorted(SUPPORTED_SUFFIXES))))
+        payload = await upload.read()
+        if len(payload) > MAX_UPLOAD_BYTES:
+            return _error(request, "File too large: {}".format(upload.filename),
+                          "The limit is 10 MB; this one is {:.1f} MB.".format(len(payload) / 1e6))
+        path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], safe_filename(upload.filename))
+        path.write_bytes(payload)
+        cvs.append((display_filename(upload.filename), path))
+
+    chosen = model if model in {m[0] for m in available_models()} else settings.model
+    run = create_run(
+        jds=jds, cvs=cvs, model=chosen, anonymise=bool(anonymise),
+        top_roles=max(1, min(int(top_roles or 3), 10)),
+        assess_all=bool(assess_all),
+        extraction_model=settings.extraction_model or chosen,
+    )
+    threading.Thread(target=execute_run, args=(run.id, STORE), daemon=True).start()
+    return RedirectResponse("/match/{}".format(run.id), status_code=303)
+
+
+@app.post("/match/demo")
+def match_demo(request: Request):
+    """A finished many-to-many run built from stored fixtures. No model call.
+
+    Exists for the same reason /demo does: the matrix, the shortlists and the
+    role tags need to be reviewable without spending anything.
+    """
+    import copy as _copy
+
+    from app.matching import Affinity
+    from app.matchrun import Candidate, MatchRun, Pair, Requisition
+    from tests.fixtures import sample_dossier
+
+    base = sample_dossier()
+    roles = [
+        ("GenAI Platform Lead", "Confidential GCC (US insurer)", [82, 55, None]),
+        ("Senior ML Engineer", "FinTech, Bengaluru", [74, 68, 31]),
+        ("VP Finance", "NBFC, Mumbai", [None, None, None]),
+    ]
+    people = [("Arjun Menon", 8.4), ("Priya Raghavan", 11.9), ("Meera Kulkarni", 7.0)]
+
+    run = MatchRun(
+        id="demo-" + uuid.uuid4().hex[:6], model=settings.model, anonymise=False,
+        requisitions=[], candidates=[],
+    )
+    for i, (title, client, _) in enumerate(roles):
+        b = _copy.deepcopy(base.brief)
+        b.role_title, b.client_name = title, client
+        run.requisitions.append(Requisition(index=i, filename="{}.txt".format(title), jd_text="", brief=b))
+    for i, (name, years) in enumerate(people):
+        prof = _copy.deepcopy(base.profile)
+        prof.full_name = name
+        tl = _copy.deepcopy(base.timeline)
+        tl.total_experience_months = int(years * 12)
+        run.candidates.append(Candidate(index=i, filename="{}.pdf".format(name.split()[0].lower()),
+                                        path=Path("."), profile=prof, timeline=tl, document=base.document))
+
+    for ri, (_, _, scores) in enumerate(roles):
+        for ci, pct in enumerate(scores):
+            if pct is None:
+                aff = Affinity(score=0.11, term_ratio=0.0)
+                run.pairs.append(Pair(candidate_index=ci, requisition_index=ri, affinity=aff,
+                                      selected=False, status="skipped",
+                                      reason="nothing in this CV touches the role's requirements"))
+                continue
+            d = _copy.deepcopy(base)
+            d.profile = run.candidates[ci].profile
+            d.timeline = run.candidates[ci].timeline
+            d.brief = run.requisitions[ri].brief
+            keep = max(1, round(len(d.assessment.requirement_matches) * pct / 100))
+            for n, m in enumerate(d.assessment.requirement_matches):
+                if n >= keep and m.verdict in ("strong", "partial"):
+                    m.verdict, m.evidence = "absent", None
+            d.anonymise = False  # type: ignore[attr-defined]
+            did = uuid.uuid4().hex[:12]
+            STORE[did] = d
+            run.pairs.append(Pair(candidate_index=ci, requisition_index=ri,
+                                  affinity=Affinity(score=pct / 100, term_ratio=0.8),
+                                  selected=True, status="done", dossier=d, dossier_id=did,
+                                  reason="screened in"))
+
+    run.phase = "done"
+    run.finished_at = run.started_at + 47.0
+    run.usage = llm_usage_stub()
+    RUNS[run.id] = run
+    return RedirectResponse("/match/{}".format(run.id), status_code=303)
+
+
+def llm_usage_stub():
+    from app.extract.llm import Usage
+    return Usage(input_tokens=41200, output_tokens=9800, calls=12)
+
+
+@app.get("/match/{run_id}", response_class=HTMLResponse)
+def match_view(request: Request, run_id: str):
+    run = RUNS.get(run_id)
+    if run is None:
+        raise HTTPException(404, "Match run not found. It may have been lost on server restart.")
+    ctx = chrome("shortlists")
+    ctx.update({"run": run, "model": run.model})
+    return templates.TemplateResponse(request, "match.html", ctx)
+
+
+@app.get("/match/{run_id}/status")
+def match_status(run_id: str):
+    run = RUNS.get(run_id)
+    if run is None:
+        raise HTTPException(404, "Match run not found.")
+    return JSONResponse(run_status(run))
 
 
 @app.get("/batch/{batch_id}", response_class=HTMLResponse)

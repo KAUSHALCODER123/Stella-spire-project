@@ -198,7 +198,8 @@ def build_dossier(
     # 2. extract facts
     stage("extracting")
     log.info("extracting profile (%d chars)", document.char_count)
-    profile = llm.extract_profile(document.text, usage=usage, model=model)
+    profile = llm.extract_profile(
+        document.text, usage=usage, model=settings.extraction_model or model)
     if not profile.positions:
         warnings.append("No work history could be extracted. The dossier below will be thin.")
 

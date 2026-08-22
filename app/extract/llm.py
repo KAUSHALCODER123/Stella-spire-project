@@ -82,11 +82,15 @@ class Usage:
     calls: int = 0
     call_log: List[str] = field(default_factory=list)
 
+    cached_tokens: int = 0
+
     def add(self, label: str, response) -> None:
         u = getattr(response, "usage", None)
         if u is not None:
             self.input_tokens += getattr(u, "input_tokens", 0) or 0
             self.output_tokens += getattr(u, "output_tokens", 0) or 0
+            details = getattr(u, "input_tokens_details", None)
+            self.cached_tokens += getattr(details, "cached_tokens", 0) or 0
         self.calls += 1
         self.call_log.append(label)
 
@@ -244,17 +248,23 @@ def assess(
     usage: Optional[Usage] = None,
     model: Optional[str] = None,
 ) -> Assessment:
+    # Block order here is a cost decision, not a style one. OpenAI caches the
+    # longest common PREFIX of a request (1024 tokens and up, roughly half
+    # price on the cached part), so whatever is shared between calls has to
+    # come first. Assessing twenty candidates against one role shares the
+    # brief; putting it ahead of the per-candidate blocks lets all twenty hit
+    # the same cached prefix instead of every call being a miss.
     user = (
+        "<client_brief>\n{brief}\n</client_brief>\n\n"
         "<computed_timeline>\n{timeline}\n</computed_timeline>\n\n"
         "<extracted_profile>\n{profile}\n</extracted_profile>\n\n"
-        "<client_brief>\n{brief}\n</client_brief>\n\n"
         "<raw_cv_text>\n{cv}\n</raw_cv_text>\n\n"
         "Write the assessment. Every 'strong' and 'partial' verdict needs a verbatim quote "
         "from the raw CV text above."
     ).format(
+        brief=brief.model_dump_json(indent=2, exclude_none=True),
         timeline=_timeline_block(timeline),
         profile=profile.model_dump_json(indent=2, exclude_none=True),
-        brief=brief.model_dump_json(indent=2, exclude_none=True),
         cv=cv_text,
     )
     return _parse(

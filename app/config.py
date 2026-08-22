@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # are not offered here: the whole pipeline depends on schema-constrained
     # generation.
     model: str = "gpt-4o"
+    # Extraction is mechanical transcription against a strict schema, and the
+    # eval harness measures it directly -- so it can run on a cheaper model
+    # than the judgement pass without the difference being a guess. Set to the
+    # same value as MODEL to disable the split.
+    extraction_model: str = "gpt-4o-mini"
     max_tokens: int = 16000
 
     # Agency branding, applied to every generated dossier.
