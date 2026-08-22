@@ -9,7 +9,8 @@ whole design:
     4. derive arithmetic flags    (arithmetic, always correct)
     5. parse the client brief     (model)
     6. assess against the brief   (model, every claim carrying a quote)
-    7. merge flags                (computed first, then judgement)
+    7. verify every quote          (string search against the CV)
+    8. merge flags                 (computed first, then judgement)
 
 Steps 3, 4 and 7 are the reason a recruiter can trust the output. The model
 never gets a chance to be wrong about a date.
@@ -27,6 +28,7 @@ from app.analysis import TimelineAnalysis, build_timeline, derive_risk_flags, so
 from app.extract import llm
 from app.extract.documents import DocumentText, extract_text
 from app.schemas import Assessment, CandidateProfile, JobBrief, RiskFlag
+from app.verify import VerificationReport, verify_assessment
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +45,8 @@ class Dossier:
 
     document: DocumentText
     usage: llm.Usage
+    brief_text: str = ""
+    verification: Optional[VerificationReport] = None
     model: str = ""
     elapsed_seconds: float = 0.0
     warnings: List[str] = field(default_factory=list)
@@ -123,7 +127,17 @@ def build_dossier(
         model=model,
     )
 
-    # 7. merge: computed flags first, they are the ones that are always right
+    # 7. verify every model-written quote actually appears in the CV. The
+    #    prompt asks for verbatim quotes; this is what checks.
+    verification = verify_assessment(assessment, document.text, jd_text)
+    if verification.unverified:
+        warnings.append(
+            "{} of {} quotes could not be located in the source CV and are marked UNVERIFIED.".format(
+                len(verification.unverified), verification.total
+            )
+        )
+
+    # 8. merge: computed flags first, they are the ones that are always right
     flags = sort_flags(computed_flags + assessment.risk_flags)
 
     # A 'strong' verdict with no quote violates the prompt contract. Rather
@@ -143,6 +157,8 @@ def build_dossier(
         flags=flags,
         document=document,
         usage=usage,
+        brief_text=jd_text,
+        verification=verification,
         model=model,
         elapsed_seconds=round(time.perf_counter() - started, 1),
         warnings=warnings,

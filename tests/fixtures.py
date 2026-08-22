@@ -10,10 +10,13 @@ model-generated flags, evidenced and bare skills, and an employment gap.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from app.analysis import build_timeline, derive_risk_flags, sort_flags
 from app.extract.documents import DocumentText
 from app.extract.llm import Usage
 from app.pipeline import Dossier
+from app.verify import verify_assessment
 from app.schemas import (
     Assessment,
     CandidateProfile,
@@ -296,12 +299,19 @@ def sample_dossier() -> Dossier:
     usage = Usage(input_tokens=18432, output_tokens=3910, calls=3,
                   call_log=["extract_profile", "extract_job_brief", "assess"])
 
+    # The real sample CV, so the source pane and quote verification have
+    # something genuine to work against.
+    root = Path(__file__).resolve().parent.parent
+    cv_text = (root / "data" / "samples" / "cv_arjun_menon.txt").read_text(encoding="utf-8")
+    jd_text = (root / "data" / "samples" / "jd_genai_platform_lead.txt").read_text(encoding="utf-8")
+
     document = DocumentText(
-        text=(sample_profile().headline or ""),
+        text=cv_text,
         page_count=2,
         source_format="pdf",
         filename="cv_arjun_menon.pdf",
     )
+    verification = verify_assessment(assessment, cv_text, jd_text)
 
     return Dossier(
         profile=profile,
@@ -311,6 +321,9 @@ def sample_dossier() -> Dossier:
         flags=flags,
         document=document,
         usage=usage,
+        brief_text=jd_text,
+        verification=verification,
+        model="gpt-4o",
         elapsed_seconds=24.6,
         warnings=[],
     )

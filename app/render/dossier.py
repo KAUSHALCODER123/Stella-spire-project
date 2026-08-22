@@ -126,6 +126,7 @@ def build_context(dossier: Dossier, *, anonymise: Optional[bool] = None) -> Dict
         redact_dossier(dossier)
         dossier._ref_override = ref_before  # type: ignore[attr-defined]
 
+    ref = getattr(dossier, "_ref_override", None) or candidate_ref(dossier)
     counts = dossier.match_counts
     coverage = dossier.must_have_coverage
     must_have_texts = {r.text for r in dossier.brief.requirements if r.kind == "must_have"}
@@ -144,7 +145,7 @@ def build_context(dossier: Dossier, *, anonymise: Optional[bool] = None) -> Dict
             "accent": settings.agency_accent,
             "accent_soft": settings.agency_accent_soft,
         },
-        "ref": getattr(dossier, "_ref_override", None) or candidate_ref(dossier),
+        "ref": ref,
         "anonymise": anonymise,
         "profile": dossier.profile,
         "brief": dossier.brief,
@@ -164,7 +165,13 @@ def build_context(dossier: Dossier, *, anonymise: Optional[bool] = None) -> Dict
         "usage": dossier.usage,
         "model": settings.model,
         "warnings": dossier.warnings,
-        "source_filename": Path(getattr(dossier.document, "filename", "") or "uploaded CV").name,
+        # The filename is identity: a blind dossier whose footer reads
+        # "cv_arjun_menon.pdf" is not blind.
+        "source_filename": (
+            "{}.{}".format(ref, dossier.document.source_format or "cv")
+            if anonymise
+            else Path(getattr(dossier.document, "filename", "") or "uploaded CV").name
+        ),
         "source_format": dossier.document.source_format,
         "page_count": dossier.document.page_count,
     }

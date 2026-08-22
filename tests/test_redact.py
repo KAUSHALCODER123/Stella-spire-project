@@ -78,8 +78,8 @@ def test_no_name_configured_leaves_names_alone():
 
 
 def test_rendered_blind_dossier_contains_no_identifiers():
-    html = render_html(sample_dossier(), anonymise=True)
-    for identifier in ("Arjun", "Menon", "arjun.menon.ml@gmail.com", "98450", "linkedin.com/in/arjunmenon"):
+    html = render_html(sample_dossier(), anonymise=True).lower()
+    for identifier in ("arjun", "menon", "arjun.menon.ml@gmail.com", "98450", "linkedin.com/in/arjunmenon"):
         assert identifier not in html, "blind dossier leaked {!r}".format(identifier)
 
 
@@ -102,3 +102,41 @@ def test_blind_dossier_keeps_the_substance():
     assert "4,200 requests per second" in html
     assert "Generative AI" in html
     assert "67%" in html
+
+
+# --- blind mode must redact the source pane too ---------------------------
+
+
+def test_blind_source_pane_is_redacted_and_still_traceable():
+    """Regression: the trace view showed the raw CV, name and all, under a
+    header that said BLIND. Redaction shifts offsets, so the spans have to be
+    recomputed rather than carried over from the unredacted text."""
+    from app.render.source import render_source
+    from app.verify import verify_assessment
+    import copy as _copy
+    from app.render.redact import redact_dossier
+
+    d = _copy.deepcopy(sample_dossier())
+    name, email, phone = d.profile.full_name, d.profile.email, d.profile.phone
+    d.document.text = redact_text(d.document.text, full_name=name, email=email, phone=phone)
+    redact_dossier(d)
+    d.verification = verify_assessment(d.assessment, d.document.text, d.brief_text)
+
+    html = render_source(d.document.text, d.verification)
+    # Case-insensitive: the CV header is upper-case, and a case-sensitive
+    # check let "ARJUN MENON" through once already.
+    lowered = html.lower()
+    for identifier in ("arjun", "menon", "arjun.menon.ml@gmail.com", "98450"):
+        assert identifier not in lowered, "blind source pane leaked {!r}".format(identifier)
+
+    # Redaction must not destroy traceability.
+    assert d.verification.verified >= 8, "redaction broke quote tracing"
+    assert d.verification.spans(), "no highlight spans survived redaction"
+
+
+def test_identified_source_pane_keeps_the_name():
+    from app.render.source import render_source
+
+    d = sample_dossier()
+    html = render_source(d.document.text, d.verification)
+    assert "ARJUN MENON" in html

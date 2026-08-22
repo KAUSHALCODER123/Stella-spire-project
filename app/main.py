@@ -11,8 +11,8 @@ is a contained change to `STORE`.
 
 from __future__ import annotations
 
+import copy
 import logging
-import shutil
 import traceback
 import uuid
 from pathlib import Path
@@ -26,6 +26,9 @@ from app.config import MODEL_CHOICES, settings
 from app.extract.documents import SUPPORTED_SUFFIXES
 from app.pipeline import Dossier, build_dossier
 from app.render.dossier import COMPUTED_KINDS, candidate_ref, render_html, render_pdf
+from app.render.source import render_source
+from app.render.redact import redact_dossier, redact_text
+from app.verify import verify_assessment
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("spiredossier")
@@ -185,11 +188,25 @@ def review(request: Request, dossier_id: str, blind: Optional[int] = None):
     dossier = _get(dossier_id)
     anonymise = bool(getattr(dossier, "anonymise", settings.anonymise_by_default)) if blind is None else bool(blind)
 
+    # Blind must be blind everywhere, the source pane included. Redaction
+    # shifts character offsets, so the quote spans are recomputed against the
+    # redacted text rather than reused from the original.
+    view = dossier
+    if anonymise:
+        view = copy.deepcopy(dossier)
+        name, email, phone = view.profile.full_name, view.profile.email, view.profile.phone
+        view.document.text = redact_text(view.document.text, full_name=name, email=email, phone=phone) or ""
+        # The filename is identity too: "cv_arjun_menon.pdf" defeats the whole
+        # point of a blind profile.
+        view.document.filename = "{}.{}".format(candidate_ref(dossier), view.document.source_format or "cv")
+        redact_dossier(view)
+        view.verification = verify_assessment(view.assessment, view.document.text, view.brief_text)
+
     # Split must-have coverage into strong vs partial for the two-tone meter.
-    must = {r.text for r in dossier.brief.requirements if r.kind == "must_have"}
+    must = {r.text for r in view.brief.requirements if r.kind == "must_have"}
     strong_pct = partial_pct = 0.0
     if must:
-        hits = [m for m in dossier.assessment.requirement_matches if m.requirement in must]
+        hits = [m for m in view.assessment.requirement_matches if m.requirement in must]
         strong_pct = sum(1 for m in hits if m.verdict == "strong") / len(must)
         partial_pct = sum(1 for m in hits if m.verdict == "partial") / len(must)
 
@@ -198,12 +215,14 @@ def review(request: Request, dossier_id: str, blind: Optional[int] = None):
         "review.html",
         {
             "dossier_id": dossier_id,
-            "dossier": dossier,
+            "dossier": view,
             "anonymise": anonymise,
             "ref": candidate_ref(dossier),
             "agency": settings.agency_name,
             "model": settings.model,
             "computed_kinds": COMPUTED_KINDS,
+            "must_have_texts": must,
+            "source_html": render_source(view.document.text, view.verification),
             "strong_pct": strong_pct,
             "partial_pct": partial_pct,
             "is_demo": dossier_id.startswith("demo-"),
