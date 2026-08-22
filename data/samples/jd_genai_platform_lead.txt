@@ -1,0 +1,35 @@
+Client: Confidential (Global Capability Centre, US-headquartered insurer)
+Role: GenAI Platform Lead
+Location: Bengaluru (hybrid, 3 days onsite)
+Reports to: Director of Data & AI, India
+
+ABOUT THE ROLE
+We are standing up a new AI platform team inside our Bengaluru GCC to serve
+claims, underwriting and customer operations. This is a 0-to-1 build. The
+GenAI Platform Lead will own the architecture, hire the initial team of six,
+and be accountable for putting the first two production GenAI use cases live
+within nine months.
+
+REQUIREMENTS
+- 10+ years of hands-on Generative AI engineering experience
+- 12+ years total software engineering experience
+- Proven expertise architecting and operating RAG systems at enterprise scale
+- Deep experience with LLM fine-tuning (LoRA / QLoRA) on production workloads
+- Strong background in MLOps: CI/CD for models, monitoring, drift detection
+- Hands-on Kubernetes and infrastructure-as-code
+- Experience with real-time, low-latency inference serving
+- Must have led a team of at least 8 engineers
+- Experience in insurance or financial services domain
+- Bachelor's degree in Computer Science or related field
+
+NICE TO HAVE
+- Experience setting up an AI function inside a Global Capability Centre
+- Familiarity with EU AI Act and model governance frameworks
+- Published research or conference talks
+- Experience with vector databases at scale
+
+COMPENSATION
+INR 85 - 110 LPA depending on experience, plus 15% target bonus.
+
+NOTICE PERIOD
+Candidate must be able to join within 60 days.

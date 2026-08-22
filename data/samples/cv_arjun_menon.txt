@@ -1,0 +1,64 @@
+ARJUN MENON
+Bengaluru, Karnataka | arjun.menon.ml@gmail.com | +91 98450 22417
+linkedin.com/in/arjunmenon-ml
+
+Head of AI Engineering at Fintrail Technologies
+
+SUMMARY
+Expert in large-scale distributed systems and production machine learning.
+Deep specialisation in MLOps, real-time inference and GenAI platform
+architecture. Passionate about building high-performing teams.
+
+EXPERIENCE
+
+Head of AI Engineering
+Fintrail Technologies, Bengaluru
+Jan 2024 - Present
+- Own the AI roadmap for Fintrail's lending risk products.
+- Rebuilt the credit-decision feature pipeline on Feast and Spark Structured
+  Streaming, cutting feature freshness from 6 hours to under 90 seconds.
+- Introduced shadow deployment for all model releases; rollback time went from
+  a two-hour manual process to four minutes.
+- Shipped an internal RAG assistant over policy documents using LangChain and
+  pgvector, now used daily by the underwriting team.
+
+Senior Machine Learning Engineer
+Razorpay, Bengaluru
+Mar 2021 - Dec 2023
+- Built and owned the real-time fraud scoring service handling ~4,200 requests
+  per second at p99 latency of 40ms, written in Go with a PyTorch model served
+  via TorchServe.
+- Designed the offline-to-online feature parity test suite that caught a
+  training-serving skew bug responsible for a 12% drop in recall.
+- Migrated model training from ad-hoc notebooks to Kubeflow Pipelines on GKE.
+- Mentored three junior engineers through the ML engineering ladder.
+
+Machine Learning Engineer
+Mu Sigma, Bengaluru
+Jul 2019 - Aug 2020
+- Built demand-forecasting models for a US retail client using gradient
+  boosted trees; reduced forecast error (WMAPE) by 8 percentage points.
+- Automated the weekly retraining job with Airflow.
+
+Data Analyst
+Tata Consultancy Services, Chennai
+Jun 2017 - Jun 2019
+- SQL and Tableau reporting for a banking client's collections team.
+- Built the branch-level delinquency dashboard used by 40+ regional managers.
+
+EDUCATION
+M.Tech, Computer Science - National Institute of Technology, Trichy - 2017
+B.Tech, Information Technology - Anna University - 2015
+
+SKILLS
+Python, Go, SQL, PyTorch, TensorFlow, Kubernetes, Docker, Kubeflow, Airflow,
+Spark, Kafka, Feast, LangChain, pgvector, AWS, GCP, Terraform, CUDA,
+distributed training, LLM fine-tuning, Kubernetes operators
+
+CERTIFICATIONS
+Google Cloud Professional Machine Learning Engineer (2022)
+
+ADDITIONAL
+Notice period: 90 days
+Current CTC: 68 LPA
+Expected CTC: 90 LPA
