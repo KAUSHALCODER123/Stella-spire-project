@@ -96,6 +96,13 @@ STORE: Dict[str, Dossier] = {}
 ROLE_LIBRARY: Dict[str, RoleConstraints] = {}
 APPLICANTS: Dict[str, dict] = {}
 
+# A populated board on first run. Five empty states hide the behaviour
+# worth looking at; set SEED_DEMO_DATA=0 to start clean.
+if os.environ.get("SEED_DEMO_DATA", "1") != "0":
+    from app.seed_data import seed_board
+
+    seed_board(ROLE_LIBRARY, APPLICANTS)
+
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 def run_in_background(target, *args) -> None:

@@ -28,6 +28,7 @@ from app.analysis import TimelineAnalysis
 from app.config import settings
 from app.extract.prompts import ASSESSMENT_SYSTEM, EXTRACTION_SYSTEM, JOB_BRIEF_SYSTEM
 from app.schemas import Assessment, CandidateProfile, JobBrief
+from app.toon import encode_model
 
 log = logging.getLogger(__name__)
 
@@ -282,6 +283,12 @@ def assess(
     # brief; putting it ahead of the per-candidate blocks lets all twenty hit
     # the same cached prefix instead of every call being a miss.
     user = (
+        # The model is told the format explicitly. A compact encoding it has to
+        # infer is a decoding risk, and the explanation costs a dozen tokens
+        # against the hundreds the encoding saves.
+        "The brief and profile below are TOON: indentation shows nesting, and a "
+        "line like `skills[3]{{name,category}}:` introduces a table whose next 3 "
+        "lines are rows of comma-separated values in that field order.\n\n"
         "<client_brief>\n{brief}\n</client_brief>\n\n"
         "<computed_timeline>\n{timeline}\n</computed_timeline>\n\n"
         "<extracted_profile>\n{profile}\n</extracted_profile>\n\n"
@@ -289,9 +296,14 @@ def assess(
         "Write the assessment. Every 'strong' and 'partial' verdict needs a verbatim quote "
         "from the raw CV text above."
     ).format(
-        brief=brief.model_dump_json(indent=2, exclude_none=True),
+        # TOON rather than JSON: these two blocks are mostly uniform arrays
+        # (requirements, positions, skills), which collapse into tables that
+        # name their fields once instead of per row. Measured at 32% fewer
+        # tokens on the real payloads. Input only -- the response stays
+        # schema-constrained JSON.
+        brief=encode_model(brief),
         timeline=_timeline_block(timeline),
-        profile=profile.model_dump_json(indent=2, exclude_none=True),
+        profile=encode_model(profile),
         cv=cv_text,
     )
     return _parse(
