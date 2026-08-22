@@ -43,6 +43,7 @@ class Dossier:
 
     document: DocumentText
     usage: llm.Usage
+    model: str = ""
     elapsed_seconds: float = 0.0
     warnings: List[str] = field(default_factory=list)
 
@@ -82,9 +83,13 @@ def build_dossier(
     cv_path: str | Path,
     jd_text: str,
     usage: Optional[llm.Usage] = None,
+    model: Optional[str] = None,
 ) -> Dossier:
+    from app.config import settings
+
     started = time.perf_counter()
     usage = usage or llm.Usage()
+    model = model or settings.model
     warnings: List[str] = []
 
     # 1. read
@@ -95,7 +100,7 @@ def build_dossier(
 
     # 2. extract facts
     log.info("extracting profile (%d chars)", document.char_count)
-    profile = llm.extract_profile(document.text, usage=usage)
+    profile = llm.extract_profile(document.text, usage=usage, model=model)
     if not profile.positions:
         warnings.append("No work history could be extracted. The dossier below will be thin.")
 
@@ -105,7 +110,7 @@ def build_dossier(
 
     # 5. client brief
     log.info("parsing client brief")
-    brief = llm.extract_job_brief(jd_text, usage=usage)
+    brief = llm.extract_job_brief(jd_text, usage=usage, model=model)
 
     # 6. assessment
     log.info("assessing against %d requirements", len(brief.requirements))
@@ -115,6 +120,7 @@ def build_dossier(
         brief=brief,
         cv_text=document.text,
         usage=usage,
+        model=model,
     )
 
     # 7. merge: computed flags first, they are the ones that are always right
@@ -137,6 +143,7 @@ def build_dossier(
         flags=flags,
         document=document,
         usage=usage,
+        model=model,
         elapsed_seconds=round(time.perf_counter() - started, 1),
         warnings=warnings,
     )

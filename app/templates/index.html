@@ -1,70 +1,195 @@
 {% extends "base.html" %}
 {% block title %}SpireDossier — new dossier{% endblock %}
+
 {% block status %}
-  Model <strong>{{ model }}</strong> ·
-  {% if has_key %}<span class="pill ok">API key loaded</span>{% else %}<span class="pill bad">no API key</span>{% endif %}
+  <span>{{ model }}</span>
+  <span class="dot {% if not has_key %}off{% endif %}">{% if has_key %}key loaded{% else %}no key{% endif %}</span>
+{% endblock %}
+
+{% block head %}
+<style>
+  .hero { display: grid; grid-template-columns: 1.05fr .95fr; gap: clamp(28px, 5vw, 68px); align-items: center;
+          padding: clamp(28px, 5vw, 60px) 0 clamp(26px, 4vw, 48px); }
+  .hero h1 { font-size: clamp(34px, 4.4vw, 52px); line-height: 1.08; }
+  .hero h1 em { font-style: italic; color: var(--quote); }
+  .hero .lede { font-size: 16.5px; color: var(--ink-2); margin: 18px 0 0; max-width: 46ch; }
+  .hero .meta { display: flex; gap: 26px; margin-top: 26px; }
+  .hero .meta div { border-top: 1px solid var(--rule); padding-top: 8px; }
+  .hero .meta .v { font-family: var(--mono); font-size: 19px; font-weight: 500; }
+  .hero .meta .k { font-size: 11.5px; color: var(--ink-4); }
+
+  /* The hero visual is the product's actual output shape: a claim, a verdict,
+     and the line from the CV that justifies it. Nothing describes this tool
+     better than one real row of it. */
+  .specimen { background: #fff; border: 1px solid var(--rule); border-radius: 4px; padding: 20px 22px; }
+  .specimen .row { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
+  .specimen .req { font-weight: 600; font-size: 14.5px; }
+  .specimen .verdict { font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+                       letter-spacing: .1em; color: var(--strong); white-space: nowrap; }
+  .specimen .evidence { margin-top: 12px; }
+  .specimen .caption { margin-top: 13px; padding-top: 12px; border-top: 1px dashed var(--rule);
+                       font-size: 12.5px; color: var(--ink-3); }
+  .specimen + .specimen { margin-top: 12px; }
+  .specimen.neg .verdict { color: var(--absent); }
+
+  .intake { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+  .stack > * + * { margin-top: 18px; }
+  .actions { display: flex; align-items: center; gap: 16px; margin-top: 22px; flex-wrap: wrap; }
+
+  .sample-strip {
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+    background: var(--field); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 15px 18px; margin-bottom: 26px;
+  }
+  .sample-strip p { margin: 3px 0 0; font-size: 13px; color: var(--ink-3); max-width: 62ch; }
+
+  .modelgrid { display: grid; grid-template-columns: 1fr; gap: 0; }
+  .modelnote { margin-top: 7px; }
+
+  .recent a { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0;
+              border-bottom: 1px solid var(--rule-soft); text-decoration: none; color: var(--ink); font-size: 13.5px; }
+  .recent a:last-child { border-bottom: none; }
+  .recent a:hover { color: var(--spire); }
+
+  @media (max-width: 940px) {
+    .hero, .intake { grid-template-columns: 1fr; }
+  }
+</style>
 {% endblock %}
 
 {% block content %}
-<h1>New candidate dossier</h1>
-<p class="sub">Upload a CV and paste the client brief. Roughly 30 seconds and three model calls.</p>
+<main>
 
-{% if not has_key %}
-<div class="notice warn">
-  <strong>No API key configured.</strong> Uploads will not run. Copy <code>.env.example</code> to
-  <code>.env</code>, add your <code>OPENAI_API_KEY</code>, restart the server, and verify with
-  <code>python -m scripts.check_setup</code>.
-  <br>The <strong>sample dossier</strong> below still works — it renders a pre-built fixture with no API call.
-</div>
-{% endif %}
-
-<div class="card">
-  <h2>Try it with no API key</h2>
-  <p style="margin:0 0 12px 0; color:var(--muted); font-size:13.5px;">
-    Renders a complete pre-built dossier — an AI/ML platform candidate against a GCC GenAI Platform Lead
-    brief. Shows the full output including flags, evidence quotes and PDF export, without calling the model.
-  </p>
-  <form method="post" action="/demo">
-    <button class="btn ghost" type="submit">Open sample dossier</button>
-  </form>
-</div>
-
-<form method="post" action="/generate" enctype="multipart/form-data">
-  <div class="row">
-    <div class="card">
-      <h2>Candidate CV</h2>
-      <label>File <span class="hint">PDF, DOCX or TXT · max 10 MB</span></label>
-      <input type="file" name="cv" accept=".pdf,.docx,.txt,.md">
-      <div style="margin-top:14px;">
-        <label class="check">
-          <input type="checkbox" name="anonymise" checked>
-          Blind profile — strip identity from the client-facing document
-        </label>
-        <div class="hint" style="margin-top:4px;">
-          Removes the name, email, phone and profile URLs from the header <em>and</em> from the generated prose.
-        </div>
+  <section class="hero">
+    <div>
+      <p class="eyebrow">Candidate dossiers for {{ agency }}</p>
+      <h1>Every judgement carries<br>the line it <em>came from</em>.</h1>
+      <p class="lede">
+        A CV and a client brief go in. A branded, evidence-cited dossier comes out — the document
+        that currently takes a recruiter forty minutes to assemble by hand.
+      </p>
+      <div class="meta">
+        <div><div class="v">~30s</div><div class="k">per dossier</div></div>
+        <div><div class="v">3</div><div class="k">model calls</div></div>
+        <div><div class="v">0</div><div class="k">unquoted claims</div></div>
       </div>
     </div>
 
-    <div class="card">
-      <h2>Client brief</h2>
-      <label>Job description <span class="hint">paste the full text</span></label>
-      <textarea name="jd_text" placeholder="Paste the client job description here...">{{ sample_jd }}</textarea>
+    <div>
+      <div class="specimen">
+        <div class="row">
+          <span class="req">Real-time, low-latency inference serving</span>
+          <span class="verdict">STRONG</span>
+        </div>
+        <div class="evidence">
+          “real-time fraud scoring service handling ~4,200 requests per second at p99 latency of 40ms”
+        </div>
+        <div class="caption">Read the claim, glance at the CV, confirm it in seconds.</div>
+      </div>
+
+      <div class="specimen neg">
+        <div class="row">
+          <span class="req">10+ years hands-on Generative AI</span>
+          <span class="verdict">IMPOSSIBLE</span>
+        </div>
+        <div class="evidence">
+          “The technology is roughly four years old. No candidate on the market can satisfy this.”
+        </div>
+        <div class="caption">Some flags are about the brief, not the candidate.</div>
+      </div>
     </div>
+  </section>
+
+  {% if not has_key %}
+  <div class="notice warn" style="margin-bottom: 24px;">
+    <strong>No API key configured.</strong> Uploads are disabled. Copy <code>.env.example</code> to
+    <code>.env</code>, add your <code>OPENAI_API_KEY</code>, restart the server, then confirm with
+    <code>python -m scripts.check_setup</code>. The sample dossier below still works.
+  </div>
+  {% endif %}
+
+  <div class="sample-strip">
+    <div>
+      <span class="eyebrow">No key required</span>
+      <p>See a complete dossier — an ML platform candidate against a GCC GenAI Platform Lead brief,
+         with flags, evidence quotes, blind mode and PDF export. Nothing is sent to a model.</p>
+    </div>
+    <form method="post" action="/demo">
+      <button class="btn ghost" type="submit">Open the sample</button>
+    </form>
   </div>
 
-  <button class="btn" type="submit" {% if not has_key %}disabled{% endif %}>Generate dossier</button>
-  {% if not has_key %}<span class="hint" style="margin-left:10px;">Add an API key to enable</span>{% endif %}
-</form>
+  <form method="post" action="/generate" enctype="multipart/form-data">
+    <div class="intake">
 
-{% if recent %}
-<div class="card" style="margin-top:18px;">
-  <h2>This session</h2>
-  {% for r in recent %}
-    <div style="padding:5px 0; border-bottom:1px solid var(--rule); font-size:13.5px;">
-      <a href="/dossier/{{ r.id }}">{{ r.ref }}</a> — {{ r.role }}
+      <div class="panel">
+        <div class="panel-head">
+          <span class="eyebrow">Candidate</span>
+          <span class="hint">PDF · DOCX · TXT</span>
+        </div>
+        <div class="panel-body stack">
+          <div>
+            <label class="field-label" for="cv">CV file</label>
+            <input id="cv" type="file" name="cv" accept=".pdf,.docx,.txt,.md">
+            <p class="hint" style="margin:7px 0 0;">Up to 10 MB. Scanned or image-only PDFs are detected and reported rather than guessed at.</p>
+          </div>
+
+          <div>
+            <label class="check">
+              <input type="checkbox" name="anonymise" checked>
+              <span>
+                <span class="t">Blind profile</span>
+                <p class="hint" style="margin:2px 0 0;">Strips name, email, phone and profile URLs from the header
+                   <em>and</em> from the written assessment.</p>
+              </span>
+            </label>
+          </div>
+
+          <div class="modelgrid">
+            <label class="field-label" for="model">Model</label>
+            <select id="model" name="model">
+              {% for value, label, note in model_choices %}
+                <option value="{{ value }}" {% if value == model %}selected{% endif %}>{{ label }} — {{ note }}</option>
+              {% endfor %}
+            </select>
+            <p class="hint modelnote">
+              All three calls use this model. Every option here supports schema-constrained output,
+              which the pipeline depends on.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <span class="eyebrow">Client brief</span>
+          <span class="hint">pre-filled with the sample</span>
+        </div>
+        <div class="panel-body">
+          <label class="field-label" for="jd">Job description</label>
+          <textarea id="jd" name="jd_text" placeholder="Paste the client job description…">{{ sample_jd }}</textarea>
+        </div>
+      </div>
+
     </div>
-  {% endfor %}
-</div>
-{% endif %}
+
+    <div class="actions">
+      <button class="btn" type="submit" {% if not has_key %}disabled{% endif %}>Generate dossier</button>
+      {% if not has_key %}<span class="hint">Add an API key to enable</span>
+      {% else %}<span class="hint">Three calls, about thirty seconds.</span>{% endif %}
+    </div>
+  </form>
+
+  {% if recent %}
+  <div class="panel" style="margin-top: 30px;">
+    <div class="panel-head"><span class="eyebrow">This session</span></div>
+    <div class="panel-body recent" style="padding-top: 4px; padding-bottom: 4px;">
+      {% for r in recent %}
+        <a href="/dossier/{{ r.id }}"><span class="num">{{ r.ref }}</span><span>{{ r.role }}</span></a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</main>
 {% endblock %}

@@ -78,15 +78,17 @@ def _parse(
     output_format: type[T],
     usage: Optional[Usage] = None,
     max_tokens: Optional[int] = None,
+    model: Optional[str] = None,
 ) -> T:
     """One structured call, with one retry on a transient failure."""
     client = get_client()
+    model = model or settings.model
     last_error: Optional[Exception] = None
 
     for attempt in (1, 2):
         try:
             response = client.responses.parse(
-                model=settings.model,
+                model=model,
                 instructions=system,
                 input=user,
                 max_output_tokens=max_tokens or settings.max_tokens,
@@ -130,7 +132,7 @@ def _parse(
 # --------------------------------------------------------------------------
 
 
-def extract_profile(cv_text: str, usage: Optional[Usage] = None) -> CandidateProfile:
+def extract_profile(cv_text: str, usage: Optional[Usage] = None, model: Optional[str] = None) -> CandidateProfile:
     user = "Extract this CV into the schema.\n\n<cv>\n{}\n</cv>".format(cv_text)
     return _parse(
         label="extract_profile",
@@ -138,10 +140,11 @@ def extract_profile(cv_text: str, usage: Optional[Usage] = None) -> CandidatePro
         user=user,
         output_format=CandidateProfile,
         usage=usage,
+        model=model,
     )
 
 
-def extract_job_brief(jd_text: str, usage: Optional[Usage] = None) -> JobBrief:
+def extract_job_brief(jd_text: str, usage: Optional[Usage] = None, model: Optional[str] = None) -> JobBrief:
     user = "Parse this job description into a structured brief.\n\n<job_description>\n{}\n</job_description>".format(jd_text)
     return _parse(
         label="extract_job_brief",
@@ -149,6 +152,7 @@ def extract_job_brief(jd_text: str, usage: Optional[Usage] = None) -> JobBrief:
         user=user,
         output_format=JobBrief,
         usage=usage,
+        model=model,
     )
 
 
@@ -175,6 +179,7 @@ def assess(
     brief: JobBrief,
     cv_text: str,
     usage: Optional[Usage] = None,
+    model: Optional[str] = None,
 ) -> Assessment:
     user = (
         "<computed_timeline>\n{timeline}\n</computed_timeline>\n\n"
@@ -195,4 +200,5 @@ def assess(
         user=user,
         output_format=Assessment,
         usage=usage,
+        model=model,
     )

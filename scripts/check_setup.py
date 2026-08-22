@@ -48,16 +48,23 @@ def main() -> int:
         print("      An invalid or revoked key is the usual cause.")
         return 1
 
-    interesting = [m for m in available if m.startswith(("gpt-5", "gpt-4.1", "gpt-4o", "o3", "o4"))]
+    from app.config import MODEL_CHOICES
+
     print("OK    Key is valid. {} models visible.".format(len(available)))
-    if interesting:
-        print("      Suitable for this project: {}".format(", ".join(interesting[:12])))
+    offered = [m[0] for m in MODEL_CHOICES]
+    reachable = [m for m in offered if m in available]
+    missing = [m for m in offered if m not in available]
+    # Print the full picker state. An earlier version truncated this list and
+    # led to a wrong conclusion about which models the key could reach.
+    print("      Picker options reachable ({}/{}): {}".format(len(reachable), len(offered), ", ".join(reachable) or "none"))
+    if missing:
+        print("      Not on this key, hidden from the picker: {}".format(", ".join(missing)))
 
     # --- is the configured model one of them? -----------------------------
     if settings.model not in available:
         print("FAIL  Configured model '{}' is not available to this key.".format(settings.model))
-        if interesting:
-            print("      Set MODEL={} in .env instead.".format(interesting[0]))
+        if reachable:
+            print("      Set MODEL={} in .env instead.".format(reachable[0]))
         return 1
     print("OK    Configured model '{}' is available.".format(settings.model))
 

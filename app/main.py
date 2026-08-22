@@ -22,10 +22,10 @@ from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.config import settings
+from app.config import MODEL_CHOICES, settings
 from app.extract.documents import SUPPORTED_SUFFIXES
 from app.pipeline import Dossier, build_dossier
-from app.render.dossier import candidate_ref, render_html, render_pdf
+from app.render.dossier import COMPUTED_KINDS, candidate_ref, render_html, render_pdf
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("spiredossier")
@@ -49,6 +49,34 @@ def _has_key() -> bool:
     return bool(settings.openai_api_key)
 
 
+_model_cache: Optional[list] = None
+
+
+def available_models() -> list:
+    """MODEL_CHOICES filtered to what this key can actually reach.
+
+    Offering a model the account cannot call is a demo-day failure waiting to
+    happen -- gpt-5 is not on every account. Looked up once, then cached; if
+    the lookup fails we show everything rather than block the UI.
+    """
+    global _model_cache
+    if _model_cache is not None:
+        return _model_cache
+    if not _has_key():
+        _model_cache = list(MODEL_CHOICES)
+        return _model_cache
+    try:
+        from app.extract.llm import get_client
+
+        ids = {m.id for m in get_client().models.list()}
+        filtered = [c for c in MODEL_CHOICES if c[0] in ids]
+        _model_cache = filtered or list(MODEL_CHOICES)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("could not list models (%s); showing all choices", exc)
+        _model_cache = list(MODEL_CHOICES)
+    return _model_cache
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     cv_sample, jd_sample = _sample_paths()
@@ -58,6 +86,7 @@ def index(request: Request):
         {
             "has_key": _has_key(),
             "model": settings.model,
+            "model_choices": available_models(),
             "agency": settings.agency_name,
             "sample_jd": jd_sample.read_text(encoding="utf-8") if jd_sample.exists() else "",
             "sample_cv_name": cv_sample.name,
@@ -76,6 +105,7 @@ async def generate(
     jd_text: str = Form(""),
     anonymise: Optional[str] = Form(None),
     use_sample: Optional[str] = Form(None),
+    model: Optional[str] = Form(None),
 ):
     cv_sample, jd_sample = _sample_paths()
 
@@ -115,7 +145,8 @@ async def generate(
 
     # --- run --------------------------------------------------------------
     try:
-        dossier = build_dossier(cv_path=cv_path, jd_text=jd_text)
+        chosen = model if model in {m[0] for m in available_models()} else settings.model
+        dossier = build_dossier(cv_path=cv_path, jd_text=jd_text, model=chosen)
     except Exception as exc:  # noqa: BLE001 - the UI is the error channel here
         log.error("pipeline failed: %s", traceback.format_exc())
         return _error(request, "Could not build the dossier.", str(exc))
@@ -154,6 +185,14 @@ def review(request: Request, dossier_id: str, blind: Optional[int] = None):
     dossier = _get(dossier_id)
     anonymise = bool(getattr(dossier, "anonymise", settings.anonymise_by_default)) if blind is None else bool(blind)
 
+    # Split must-have coverage into strong vs partial for the two-tone meter.
+    must = {r.text for r in dossier.brief.requirements if r.kind == "must_have"}
+    strong_pct = partial_pct = 0.0
+    if must:
+        hits = [m for m in dossier.assessment.requirement_matches if m.requirement in must]
+        strong_pct = sum(1 for m in hits if m.verdict == "strong") / len(must)
+        partial_pct = sum(1 for m in hits if m.verdict == "partial") / len(must)
+
     return templates.TemplateResponse(
         request,
         "review.html",
@@ -164,6 +203,9 @@ def review(request: Request, dossier_id: str, blind: Optional[int] = None):
             "ref": candidate_ref(dossier),
             "agency": settings.agency_name,
             "model": settings.model,
+            "computed_kinds": COMPUTED_KINDS,
+            "strong_pct": strong_pct,
+            "partial_pct": partial_pct,
             "is_demo": dossier_id.startswith("demo-"),
         },
     )
@@ -203,5 +245,6 @@ def health():
         "ok": True,
         "api_key_configured": _has_key(),
         "model": settings.model,
+        "model_choices": [m[0] for m in available_models()],
         "dossiers_in_memory": len(STORE),
     }

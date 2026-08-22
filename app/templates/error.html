@@ -1,7 +1,10 @@
 {% extends "base.html" %}
-{% block title %}SpireDossier — problem{% endblock %}
+{% block title %}SpireDossier — {{ title }}{% endblock %}
 {% block content %}
-<h1>{{ title }}</h1>
-<div class="notice warn" style="margin-top:14px;">{{ detail }}</div>
-<a class="btn ghost" href="/">Back</a>
+<main style="max-width:720px;">
+  <p class="eyebrow" style="margin-top:32px;">Could not continue</p>
+  <h1 style="font-size:32px; margin-top:8px;">{{ title }}</h1>
+  <div class="notice warn" style="margin:20px 0 26px;">{{ detail }}</div>
+  <a class="btn ghost" href="/">Back to intake</a>
+</main>
 {% endblock %}

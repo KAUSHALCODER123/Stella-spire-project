@@ -14,9 +14,15 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
 
-    # Overridable from .env. Run `python -m scripts.check_setup` to see which
-    # models your key can actually reach.
-    model: str = "gpt-5"
+    # Overridable from .env, and per-run from the UI. Run
+    # `python -m scripts.check_setup` to see which models your key can reach.
+    #
+    # gpt-4o is the default because it is the most widely available model that
+    # supports json_schema structured outputs. Structured outputs need
+    # gpt-4o-2024-08-06 or later -- gpt-4-turbo and gpt-4 cannot do it, so they
+    # are not offered here: the whole pipeline depends on schema-constrained
+    # generation.
+    model: str = "gpt-4o"
     max_tokens: int = 16000
 
     # Agency branding, applied to every generated dossier.
@@ -33,6 +39,19 @@ class Settings(BaseSettings):
     output_dir: Path = ROOT / "data" / "out"
     sample_dir: Path = ROOT / "data" / "samples"
     database_path: Path = ROOT / "data" / "spiredossier.db"
+
+
+# Offered in the UI model picker. Each supports json_schema structured output.
+MODEL_CHOICES = [
+    ("gpt-4o", "GPT-4o", "Balanced. The default."),
+    ("gpt-4o-mini", "GPT-4o mini", "Cheapest. Fine for bulk extraction."),
+    ("gpt-4.1", "GPT-4.1", "Stronger long-document reading."),
+    ("gpt-4.1-mini", "GPT-4.1 mini", "Cheaper 4.1."),
+    ("gpt-5", "GPT-5", "Better judgement on the assessment pass."),
+    ("gpt-5-mini", "GPT-5 mini", "Cheaper GPT-5."),
+    ("gpt-5.4", "GPT-5.4", "Newer frontier model."),
+    ("gpt-5.5", "GPT-5.5", "Newest frontier model. Highest cost."),
+]
 
 
 settings = Settings()
