@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}SpireDossier — new dossier{% endblock %}
+{% block status %}
+  Model <strong>{{ model }}</strong> ·
+  {% if has_key %}<span class="pill ok">API key loaded</span>{% else %}<span class="pill bad">no API key</span>{% endif %}
+{% endblock %}
+
+{% block content %}
+<h1>New candidate dossier</h1>
+<p class="sub">Upload a CV and paste the client brief. Roughly 30 seconds and three model calls.</p>
+
+{% if not has_key %}
+<div class="notice warn">
+  <strong>No API key configured.</strong> Uploads will not run. Copy <code>.env.example</code> to
+  <code>.env</code>, add your <code>OPENAI_API_KEY</code>, restart the server, and verify with
+  <code>python -m scripts.check_setup</code>.
+  <br>The <strong>sample dossier</strong> below still works — it renders a pre-built fixture with no API call.
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Try it with no API key</h2>
+  <p style="margin:0 0 12px 0; color:var(--muted); font-size:13.5px;">
+    Renders a complete pre-built dossier — an AI/ML platform candidate against a GCC GenAI Platform Lead
+    brief. Shows the full output including flags, evidence quotes and PDF export, without calling the model.
+  </p>
+  <form method="post" action="/demo">
+    <button class="btn ghost" type="submit">Open sample dossier</button>
+  </form>
+</div>
+
+<form method="post" action="/generate" enctype="multipart/form-data">
+  <div class="row">
+    <div class="card">
+      <h2>Candidate CV</h2>
+      <label>File <span class="hint">PDF, DOCX or TXT · max 10 MB</span></label>
+      <input type="file" name="cv" accept=".pdf,.docx,.txt,.md">
+      <div style="margin-top:14px;">
+        <label class="check">
+          <input type="checkbox" name="anonymise" checked>
+          Blind profile — strip identity from the client-facing document
+        </label>
+        <div class="hint" style="margin-top:4px;">
+          Removes the name, email, phone and profile URLs from the header <em>and</em> from the generated prose.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Client brief</h2>
+      <label>Job description <span class="hint">paste the full text</span></label>
+      <textarea name="jd_text" placeholder="Paste the client job description here...">{{ sample_jd }}</textarea>
+    </div>
+  </div>
+
+  <button class="btn" type="submit" {% if not has_key %}disabled{% endif %}>Generate dossier</button>
+  {% if not has_key %}<span class="hint" style="margin-left:10px;">Add an API key to enable</span>{% endif %}
+</form>
+
+{% if recent %}
+<div class="card" style="margin-top:18px;">
+  <h2>This session</h2>
+  {% for r in recent %}
+    <div style="padding:5px 0; border-bottom:1px solid var(--rule); font-size:13.5px;">
+      <a href="/dossier/{{ r.id }}">{{ r.ref }}</a> — {{ r.role }}
+    </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

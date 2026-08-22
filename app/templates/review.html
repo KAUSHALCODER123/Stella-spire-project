@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}{{ ref }} — {{ dossier.brief.role_title }}{% endblock %}
+{% block status %}
+  Built in {{ dossier.elapsed_seconds }}s ·
+  {{ dossier.usage.input_tokens }} in / {{ dossier.usage.output_tokens }} out tokens
+{% endblock %}
+
+{% block head %}
+<style>
+  .split { display: flex; gap: 18px; align-items: flex-start; }
+  .paper { flex: 1 1 62%; min-width: 0; }
+  .side  { flex: 0 0 340px; position: sticky; top: 18px; }
+  iframe.doc { width: 100%; height: 78vh; border: 1px solid var(--rule); border-radius: 7px; background: #fff; }
+  .toolbar { display: flex; gap: 9px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .stat { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--rule); font-size: 13.5px; }
+  .stat:last-child { border-bottom: none; }
+  .stat .k { color: var(--muted); }
+  .stat .v { font-weight: 600; }
+  .fl { padding: 7px 0 7px 9px; border-left: 3px solid var(--faint); margin-bottom: 8px; font-size: 13px; }
+  .fl.high { border-left-color: var(--bad); } .fl.medium { border-left-color: var(--warn); }
+  .fl .h { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+  .fl.high .h { color: var(--bad); } .fl.medium .h { color: var(--warn); } .fl.low .h { color: var(--muted); }
+  .tag { font-size: 9.5px; font-weight: 700; letter-spacing:.4px; background: var(--accent-soft);
+         color: var(--accent); padding: 1px 5px; border-radius: 2px; }
+  .bar { height: 8px; background: var(--rule); border-radius: 4px; display: flex; overflow: hidden; margin: 6px 0 4px; }
+  .bar .s { background: var(--ok); } .bar .p { background: var(--warn); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="toolbar">
+  <div style="flex:1; min-width:220px;">
+    <h1 style="margin:0;">{{ ref }}</h1>
+    <p class="sub" style="margin:0;">{{ dossier.brief.role_title }}{% if dossier.brief.client_name %} · {{ dossier.brief.client_name }}{% endif %}</p>
+  </div>
+  <a class="btn small {% if anonymise %}{% else %}ghost{% endif %}" href="?blind=1">Blind</a>
+  <a class="btn small {% if anonymise %}ghost{% endif %}" href="?blind=0">Identified</a>
+  <a class="btn small" href="/dossier/{{ dossier_id }}/pdf?blind={{ 1 if anonymise else 0 }}">Download PDF</a>
+  <a class="btn small ghost" href="/">New</a>
+</div>
+
+{% if is_demo %}
+<div class="notice info">
+  <strong>Sample dossier.</strong> Rendered from a pre-built fixture — no model call was made.
+  Upload a real CV on the home page to run the live pipeline.
+</div>
+{% endif %}
+
+{% for w in dossier.warnings %}
+<div class="notice warn">{{ w }}</div>
+{% endfor %}
+
+<div class="split">
+  <div class="paper">
+    <iframe class="doc" src="/dossier/{{ dossier_id }}/embed?blind={{ 1 if anonymise else 0 }}"></iframe>
+  </div>
+
+  <div class="side">
+    <div class="card">
+      <h2>Coverage</h2>
+      {% set c = dossier.match_counts %}
+      {% if dossier.must_have_coverage is not none %}
+        <div class="bar">
+          <div class="s" style="width: {{ (dossier.must_have_coverage * 100) | round(0) }}%"></div>
+        </div>
+        <div style="font-size:13px; color:var(--muted);">
+          <strong style="color:var(--ink);">{{ (dossier.must_have_coverage * 100) | round(0) | int }}%</strong>
+          of must-have requirements met
+        </div>
+      {% endif %}
+      <div style="margin-top:10px;">
+        <div class="stat"><span class="k">Strong</span><span class="v" style="color:var(--ok)">{{ c.strong }}</span></div>
+        <div class="stat"><span class="k">Partial</span><span class="v" style="color:var(--warn)">{{ c.partial }}</span></div>
+        <div class="stat"><span class="k">Unclear</span><span class="v">{{ c.unclear }}</span></div>
+        <div class="stat"><span class="k">Absent</span><span class="v" style="color:var(--bad)">{{ c.absent }}</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Computed facts</h2>
+      <div class="stat"><span class="k">Total experience</span><span class="v">{{ dossier.timeline.total_experience_years }} yrs</span></div>
+      <div class="stat"><span class="k">Average tenure</span><span class="v">{{ dossier.timeline.average_tenure_years }} yrs</span></div>
+      <div class="stat"><span class="k">Roles</span><span class="v">{{ dossier.timeline.intervals | length }}</span></div>
+      <div class="stat"><span class="k">Gaps</span><span class="v">{{ dossier.timeline.gaps | length }}</span></div>
+      {% if dossier.profile.notice_period_days %}
+      <div class="stat"><span class="k">Notice</span><span class="v">{{ dossier.profile.notice_period_days }} days</span></div>
+      {% endif %}
+    </div>
+
+    {% if dossier.flags %}
+    <div class="card">
+      <h2>Flags ({{ dossier.flags | length }})</h2>
+      {% for f in dossier.flags %}
+      <div class="fl {{ f.severity }}">
+        <div class="h">{{ f.severity }} · {{ f.kind | replace("_", " ") }}</div>
+        <div>{{ f.summary }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <h2>Provenance</h2>
+      <div class="stat"><span class="k">Source</span><span class="v">{{ dossier.document.source_format | upper }}</span></div>
+      <div class="stat"><span class="k">Model</span><span class="v">{{ model }}</span></div>
+      <div class="stat"><span class="k">Calls</span><span class="v">{{ dossier.usage.calls }}</span></div>
+      <div class="stat"><span class="k">Tokens</span><span class="v">{{ dossier.usage.input_tokens + dossier.usage.output_tokens }}</span></div>
+      <div class="stat"><span class="k">Time</span><span class="v">{{ dossier.elapsed_seconds }}s</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}

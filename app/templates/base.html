@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SpireDossier{% endblock %}</title>
+<style>
+  :root {
+    --accent: #1F3A5F;
+    --accent-soft: #E8EDF4;
+    --ink: #1A1D23;
+    --muted: #5B6472;
+    --faint: #8A94A6;
+    --rule: #DFE4EC;
+    --bg: #F6F8FB;
+    --ok: #1B7F5A;
+    --warn: #B8860B;
+    --bad: #A33A3A;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+    font-size: 15px; line-height: 1.55;
+  }
+  a { color: var(--accent); }
+
+  header.top {
+    background: #fff; border-bottom: 1px solid var(--rule);
+    padding: 14px 28px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .brand { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: -0.2px; text-decoration: none; }
+  .brand small { display: block; font-size: 11px; font-weight: 400; color: var(--faint); letter-spacing: 0.3px; }
+  .top .status { font-size: 12px; color: var(--muted); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 11px; font-size: 11px; font-weight: 600; }
+  .pill.ok  { background: #E8F5EF; color: var(--ok); }
+  .pill.bad { background: #FBECEC; color: var(--bad); }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+  h1 { font-size: 25px; margin: 0 0 4px 0; letter-spacing: -0.4px; }
+  .sub { color: var(--muted); margin: 0 0 22px 0; }
+
+  .card { background: #fff; border: 1px solid var(--rule); border-radius: 7px; padding: 20px; margin-bottom: 18px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent);
+             margin: 0 0 12px 0; }
+
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 5px; }
+  .hint { font-size: 12px; color: var(--faint); font-weight: 400; }
+  input[type=file], textarea {
+    width: 100%; padding: 9px 11px; border: 1px solid var(--rule); border-radius: 5px;
+    font-family: inherit; font-size: 13px; background: #fff; color: var(--ink);
+  }
+  textarea { min-height: 220px; resize: vertical; font-family: ui-monospace, Consolas, monospace; line-height: 1.5; }
+  input[type=file] { padding: 7px; }
+
+  .btn {
+    display: inline-block; padding: 9px 17px; border-radius: 5px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+    text-decoration: none; font-family: inherit;
+  }
+  .btn:hover { filter: brightness(1.12); }
+  .btn.ghost { background: #fff; color: var(--accent); }
+  .btn.small { padding: 5px 11px; font-size: 12.5px; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+  .row { display: flex; gap: 18px; align-items: flex-start; }
+  .row > * { flex: 1; min-width: 0; }
+
+  .check { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; }
+  .check input { width: auto; }
+
+  .notice { padding: 11px 14px; border-radius: 5px; font-size: 13px; margin-bottom: 18px; }
+  .notice.warn { background: #FDF6E7; border-left: 3px solid var(--warn); color: #7A5A12; }
+  .notice.info { background: var(--accent-soft); border-left: 3px solid var(--accent); color: var(--accent); }
+  .notice code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 3px; }
+
+  footer.foot { text-align: center; color: var(--faint); font-size: 12px; padding: 18px; }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="/">SpireDossier<small>{{ agency }} candidate intelligence</small></a>
+  <div class="status">{% block status %}{% endblock %}</div>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer class="foot">
+  Every judgement in a dossier carries the CV line it rests on. Timeline figures are computed, not generated.
+</footer>
+</body>
+</html>
