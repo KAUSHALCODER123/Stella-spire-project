@@ -1,0 +1,39 @@
+MEERA KULKARNI
+Pune, Maharashtra | meera.k.data@gmail.com | +91 97654 33012
+
+Data Scientist
+
+SUMMARY
+Data scientist with strong grounding in statistics and machine learning.
+Experienced across forecasting, churn and recommendation problems.
+Expert in GenAI, LLMs, MLOps and cloud architecture.
+
+EXPERIENCE
+
+Data Scientist
+Persistent Systems, Pune
+Aug 2021 - Present
+- Built churn prediction models for a telecom client; AUC improved from
+  0.71 to 0.78.
+- Developed a demand forecasting model in Prophet for a retail client.
+- Created dashboards in Power BI for business stakeholders.
+- Ran A/B tests for a recommendation feature.
+
+Junior Data Scientist
+Tech Mahindra, Pune
+Jul 2019 - Jul 2021
+- Exploratory analysis and feature engineering for client projects.
+- Built classification models in scikit-learn.
+
+EDUCATION
+M.Sc. Statistics - Savitribai Phule Pune University - 2019
+B.Sc. Mathematics - Fergusson College - 2017
+
+SKILLS
+Python, R, SQL, scikit-learn, pandas, Prophet, Power BI, Tableau,
+TensorFlow, PyTorch, LLMs, GenAI, RAG, LangChain, MLOps, Kubernetes,
+AWS, Azure, Docker, Spark
+
+ADDITIONAL
+Notice period: 90 days
+Expected CTC: 45 LPA

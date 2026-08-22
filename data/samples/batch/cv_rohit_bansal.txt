@@ -1,0 +1,45 @@
+ROHIT BANSAL
+Gurgaon, Haryana | rohit.bansal.eng@gmail.com | +91 98110 77234
+
+Director of Engineering, AI Platforms
+
+PROFILE
+Fifteen years in enterprise software, the last six leading AI and data
+platform organisations inside global capability centres.
+
+EXPERIENCE
+
+Director of Engineering, AI Platforms
+Optum (UnitedHealth Group), Gurgaon
+Jan 2021 - Present
+- Lead a 42-person organisation across four teams: ML platform, data
+  engineering, MLOps and applied research.
+- Delivered the clinical-notes summarisation platform now processing
+  2.1 million documents per month, built on Azure OpenAI with retrieval
+  over an internal clinical corpus.
+- Owned the GenAI governance framework adopted enterprise-wide, covering
+  PHI handling, evaluation gates and human-in-the-loop review.
+- Hired 27 engineers across three years; attrition held under 9%.
+
+Senior Engineering Manager
+Sapient / Publicis Sapient, Gurgaon
+Jun 2016 - Dec 2020
+- Managed 3 teams (18 engineers) delivering data platforms for BFSI clients.
+- Led the migration of a claims data warehouse to Snowflake.
+
+Technical Lead
+Adobe, Noida
+Aug 2011 - May 2016
+- Backend development on Adobe Experience Manager. Team of 6.
+
+EDUCATION
+B.Tech Computer Science - IIT Delhi - 2011
+
+SKILLS
+Engineering leadership, org design, Python, Java, Azure, Azure OpenAI,
+Databricks, Snowflake, Kubernetes, RAG architectures, model governance,
+healthcare data, HIPAA, stakeholder management
+
+ADDITIONAL
+Notice period: 90 days
+Expected CTC: 1.35 Cr

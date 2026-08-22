@@ -15,11 +15,9 @@
 
   /* The hero IS the mechanism: a claim, and the line under the highlighter
      that justifies it. Nothing explains this product faster than showing it. */
-  .trace-demo { display: grid; gap: 0; }
-  .td-claim, .td-source {
-    background: var(--sheet); border: 1px solid var(--rule); padding: 15px 17px;
-  }
-  .td-claim { border-radius: 3px 3px 0 0; display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
+  .trace-demo { display: grid; gap: 0; box-shadow: var(--shadow-2); border-radius: 6px; }
+  .td-claim, .td-source { background: var(--sheet); border: 1px solid var(--rule); padding: 15px 17px; }
+  .td-claim { border-radius: 6px 6px 0 0; display: flex; justify-content: space-between; gap: 14px; align-items: baseline; }
   .td-claim .req { font-weight: 600; font-size: 15px; }
   .td-claim .verdict { font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .12em; color: var(--strong); }
   .td-link {
@@ -28,16 +26,15 @@
   }
   .td-link .rail { flex: 1; height: 1px; background: var(--rule); }
   .td-link .lbl { font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--slate-4); }
-  .td-source { border-radius: 0 0 3px 3px; font-family: var(--mono); font-size: 12px; line-height: 1.7; color: var(--slate-2); }
+  .td-source { border-radius: 0 0 6px 6px; font-family: var(--mono); font-size: 12px; line-height: 1.7; color: var(--slate-2); }
   .td-source .fn { display: block; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--slate-4); margin-bottom: 7px; }
-
   .td-note { margin: 14px 0 0; font-size: 13.5px; color: var(--slate-3); }
   .td-note b { color: var(--slate); font-weight: 600; }
 
   .strip {
     display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap;
-    background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px;
-    padding: 15px 18px; margin-bottom: 22px;
+    background: var(--sheet); border: 1px solid var(--rule); border-radius: 6px;
+    box-shadow: var(--shadow-1); padding: 15px 18px; margin-bottom: 22px;
   }
   .strip p { margin: 4px 0 0; font-size: 13px; color: var(--slate-3); max-width: 64ch; }
 
@@ -46,9 +43,57 @@
   .actions { display: flex; align-items: center; gap: 15px; margin-top: 20px; flex-wrap: wrap; }
 
   .recent a { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0;
-              border-bottom: 1px solid var(--rule-soft); text-decoration: none; color: var(--slate); font-size: 13.5px; }
+              border-bottom: 1px solid var(--rule-soft); text-decoration: none; color: var(--slate); font-size: 13.5px;
+              transition: color var(--fast) var(--ease), padding-left var(--fast) var(--ease); }
   .recent a:last-child { border-bottom: none; }
-  .recent a:hover { color: var(--spire); }
+  .recent a:hover { color: var(--spire); padding-left: 4px; }
+
+  /* --- drop zone --------------------------------------------------------- */
+  .drop {
+    position: relative; border: 1.5px dashed var(--rule); border-radius: 6px;
+    background: #FBFCFE; padding: 24px 18px; text-align: center; cursor: pointer;
+    transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease),
+                transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+  }
+  .drop:hover { border-color: var(--slate-4); background: var(--sheet); }
+  .drop.is-over {
+    border-color: var(--spire); background: var(--spire-soft);
+    border-style: solid; transform: scale(1.01); box-shadow: var(--shadow-2);
+  }
+  .drop.has-files { border-style: solid; border-color: var(--rule); background: var(--sheet); text-align: left; padding: 0; }
+  .drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; padding: 0; }
+
+  .drop .prompt .big { font-size: 14.5px; font-weight: 600; }
+  .drop .prompt .small { font-size: 12.5px; color: var(--slate-4); margin-top: 3px; }
+
+  .filelist { max-height: 178px; overflow: auto; }
+  .filelist .f {
+    display: flex; align-items: center; gap: 10px; padding: 9px 14px;
+    border-bottom: 1px solid var(--rule-soft); font-size: 13px;
+    animation: rise .3s var(--ease) both;
+  }
+  .filelist .f:last-child { border-bottom: none; }
+  .filelist .f .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filelist .f .s { font-family: var(--mono); font-size: 10.5px; color: var(--slate-4); }
+  .filelist .f .i {
+    width: 21px; height: 21px; border-radius: 3px; background: var(--spire-soft); color: var(--spire);
+    font-family: var(--mono); font-size: 8px; font-weight: 600;
+    display: grid; place-items: center; flex: none;
+  }
+  .filebar {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 14px; border-top: 1px solid var(--rule-soft); background: #FBFCFE;
+    font-size: 12.5px; color: var(--slate-3); border-radius: 0 0 5px 5px;
+  }
+  .linkish {
+    background: none; border: 0; padding: 0; cursor: pointer; color: var(--spire);
+    font-family: var(--body); font-size: 12.5px; font-weight: 600; text-decoration: underline;
+  }
+  .batch-note {
+    margin-top: 10px; font-size: 12.5px; color: var(--spire); line-height: 1.5;
+    background: var(--spire-soft); border-radius: 4px; padding: 9px 12px;
+    animation: rise .3s var(--ease) both;
+  }
 
   @media (max-width: 940px) { .hero, .intake { grid-template-columns: 1fr; } }
 </style>
@@ -62,7 +107,7 @@
       <p class="eyebrow">Candidate dossiers for {{ agency }}</p>
       <h1>Read the claim.<br>Check the line.<br>Send it.</h1>
       <p class="lede">
-        A CV and a client brief go in. A branded dossier comes out, and every judgement in it
+        CVs and a client brief go in. Branded dossiers come out, and every judgement in them
         links back to the exact words it was drawn from — so you can verify the machine
         instead of trusting it.
       </p>
@@ -92,14 +137,14 @@
   </section>
 
   {% if not has_key %}
-  <div class="notice warn" style="margin-bottom: 22px;">
+  <div class="notice warn reveal" style="margin-bottom: 22px;">
     <strong>No API key configured.</strong> Uploads are off. Copy <code>.env.example</code> to
     <code>.env</code>, add your <code>OPENAI_API_KEY</code>, restart the server, then confirm with
     <code>python -m scripts.check_setup</code>. The sample below still works.
   </div>
   {% endif %}
 
-  <div class="strip">
+  <div class="strip reveal">
     <div>
       <span class="eyebrow">No key required</span>
       <p>Open a finished dossier — an ML platform candidate against a GCC GenAI Platform Lead brief.
@@ -113,16 +158,28 @@
   <form method="post" action="/generate" enctype="multipart/form-data">
     <div class="intake">
 
-      <div class="sheet">
+      <div class="sheet lift reveal">
         <div class="head">
-          <span class="eyebrow">Candidate</span>
-          <span class="hint">PDF · DOCX · TXT</span>
+          <span class="eyebrow">Candidates</span>
+          <span class="hint">one or many</span>
         </div>
         <div class="body stack">
           <div>
-            <label class="field-label" for="cv">CV file</label>
-            <input id="cv" type="file" name="cv" accept=".pdf,.docx,.txt,.md">
-            <p class="hint" style="margin:7px 0 0;">Up to 10 MB. Scanned or image-only PDFs are reported, not guessed at.</p>
+            <label class="field-label" for="cv">CV files</label>
+            <div class="drop" id="drop">
+              <input id="cv" type="file" name="cv" accept=".pdf,.docx,.txt,.md" multiple>
+              <div class="prompt" id="drop-prompt">
+                <div class="big">Drop CVs here, or click to choose</div>
+                <div class="small">One builds a dossier. Several build a ranked shortlist.</div>
+              </div>
+              <div class="filelist" id="filelist" hidden></div>
+              <div class="filebar" id="filebar" hidden>
+                <span id="filesummary"></span>
+                <button type="button" class="linkish" id="clearfiles">Clear</button>
+              </div>
+            </div>
+            <p class="hint" style="margin:7px 0 0;">PDF, DOCX or TXT, up to 10 MB each. Scanned or image-only PDFs are reported, not guessed at.</p>
+            <div class="batch-note" id="batchnote" hidden></div>
           </div>
 
           <label class="check">
@@ -141,13 +198,13 @@
                 <option value="{{ value }}" {% if value == model %}selected{% endif %}>{{ label }} — {{ note }}</option>
               {% endfor %}
             </select>
-            <p class="hint" style="margin-top:7px;">All three calls use this model. Every option supports
-               schema-constrained output, which the pipeline depends on.</p>
+            <p class="hint" style="margin-top:7px;">Every option supports schema-constrained output,
+               which the pipeline depends on.</p>
           </div>
         </div>
       </div>
 
-      <div class="sheet">
+      <div class="sheet lift reveal">
         <div class="head">
           <span class="eyebrow">Client brief</span>
           <span class="hint">pre-filled with the sample</span>
@@ -161,14 +218,14 @@
     </div>
 
     <div class="actions">
-      <button class="btn" type="submit" {% if not has_key %}disabled{% endif %}>Generate dossier</button>
+      <button class="btn" type="submit" id="submit" {% if not has_key %}disabled{% endif %}>Generate dossier</button>
       {% if not has_key %}<span class="hint">Add an API key to enable</span>
-      {% else %}<span class="hint">Three calls, about thirty seconds.</span>{% endif %}
+      {% else %}<span class="hint" id="timehint">Three calls, about thirty seconds.</span>{% endif %}
     </div>
   </form>
 
   {% if recent %}
-  <div class="sheet" style="margin-top: 26px;">
+  <div class="sheet reveal" style="margin-top: 26px;">
     <div class="head"><span class="eyebrow">This session</span></div>
     <div class="body recent" style="padding-top:3px; padding-bottom:3px;">
       {% for r in recent %}
@@ -179,4 +236,100 @@
   {% endif %}
 
 </main>
+
+<script>
+(function () {
+  var input = document.getElementById("cv");
+  var drop = document.getElementById("drop");
+  var promptEl = document.getElementById("drop-prompt");
+  var list = document.getElementById("filelist");
+  var bar = document.getElementById("filebar");
+  var summary = document.getElementById("filesummary");
+  var clear = document.getElementById("clearfiles");
+  var note = document.getElementById("batchnote");
+  var submit = document.getElementById("submit");
+  var timehint = document.getElementById("timehint");
+  if (!input) return;
+
+  function fmt(bytes) {
+    return bytes < 1048576
+      ? Math.max(1, Math.round(bytes / 1024)) + " KB"
+      : (bytes / 1048576).toFixed(1) + " MB";
+  }
+
+  function esc(s) {
+    return s.replace(/[&<>"]/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c];
+    });
+  }
+
+  function render() {
+    var files = Array.prototype.slice.call(input.files || []);
+    var n = files.length;
+
+    promptEl.hidden = n > 0;
+    list.hidden = n === 0;
+    bar.hidden = n === 0;
+    drop.classList.toggle("has-files", n > 0);
+
+    list.innerHTML = files.map(function (f) {
+      var ext = (f.name.split(".").pop() || "?").toUpperCase().slice(0, 4);
+      return '<div class="f"><span class="i">' + esc(ext) + "</span>" +
+             '<span class="n">' + esc(f.name) + "</span>" +
+             '<span class="s">' + fmt(f.size) + "</span></div>";
+    }).join("");
+
+    var total = files.reduce(function (t, f) { return t + f.size; }, 0);
+    summary.textContent = n + (n === 1 ? " file" : " files") + " · " + fmt(total) + " total";
+
+    // The control says exactly what pressing it will do.
+    if (submit) submit.textContent = n > 1 ? "Generate " + n + " dossiers" : "Generate dossier";
+
+    note.hidden = n < 2;
+    if (n >= 2) {
+      note.textContent = n + " CVs will run four at a time against one brief, then be ranked into a " +
+        "shortlist. The brief is read once and shared, which saves " + (n - 1) + " model calls.";
+    }
+    if (timehint) {
+      timehint.textContent = n > 1
+        ? "About " + Math.max(1, Math.ceil(n / 4) * 30 / 60 * 1.2).toFixed(0) + " minute(s) for " + n + " candidates."
+        : "Three calls, about thirty seconds.";
+    }
+  }
+
+  input.addEventListener("change", render);
+
+  clear.addEventListener("click", function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    input.value = "";
+    render();
+  });
+
+  ["dragenter", "dragover"].forEach(function (evt) {
+    drop.addEventListener(evt, function (e) { e.preventDefault(); drop.classList.add("is-over"); });
+  });
+  ["dragleave", "drop"].forEach(function (evt) {
+    drop.addEventListener(evt, function (e) { e.preventDefault(); drop.classList.remove("is-over"); });
+  });
+  drop.addEventListener("drop", function (e) {
+    if (e.dataTransfer && e.dataTransfer.files.length) {
+      input.files = e.dataTransfer.files;
+      render();
+    }
+  });
+
+  // The work is slow enough that the button has to show it started.
+  var form = input.closest("form");
+  form.addEventListener("submit", function () {
+    if (!input.files.length) return;
+    var n = input.files.length;
+    submit.disabled = true;
+    submit.innerHTML = '<span class="spinner" style="border-color:rgba(255,255,255,.3);border-top-color:#fff"></span>' +
+                       (n > 1 ? "Starting batch…" : "Building dossier…");
+  });
+
+  render();
+})();
+</script>
 {% endblock %}

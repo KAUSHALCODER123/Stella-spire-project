@@ -1,0 +1,41 @@
+DANIEL OKONKWO
+Dubai, UAE | d.okonkwo@protonmail.com | +971 50 448 2210
+
+Staff Engineer, Machine Learning Infrastructure
+
+SUMMARY
+Backend and ML infrastructure engineer. Eight years shipping distributed
+systems, most recently model serving infrastructure for a regional bank.
+
+EXPERIENCE
+
+Staff Engineer, ML Infrastructure
+Mashreq Bank, Dubai
+Sep 2023 - Present
+- Rebuilt the model serving layer on KServe and Kubernetes, consolidating
+  nine bespoke Flask services into one platform.
+- Cut p99 inference latency for the fraud model from 340ms to 55ms.
+- Set up automated drift detection and alerting across 14 production models.
+
+Senior Backend Engineer
+Careem, Dubai
+Feb 2020 - Aug 2023
+- Owned the pricing service handling 12,000 requests per second at peak.
+- Migrated the service mesh to Istio across 40 microservices.
+- Introduced Terraform modules now used by six teams.
+
+Backend Engineer
+Andela, Lagos
+Mar 2018 - Jan 2020
+- Built payment integrations for fintech clients in Go and Python.
+
+EDUCATION
+B.Sc. Computer Engineering - University of Lagos - 2017
+
+SKILLS
+Go, Python, Rust, Kubernetes, KServe, Istio, Terraform, AWS, Kafka,
+Prometheus, Grafana, PostgreSQL, distributed systems, model serving
+
+ADDITIONAL
+Notice period: 30 days
+Requires UAE-to-India relocation support

@@ -1,0 +1,47 @@
+PRIYA RAGHAVAN
+Hyderabad, Telangana | priya.raghavan@outlook.com | +91 99012 45580
+
+Principal Machine Learning Engineer, Cognizant Digital Engineering
+
+PROFILE
+Twelve years building data and ML platforms for insurance and banking clients.
+Led the GenAI practice build-out for a US insurance carrier's India GCC.
+
+EXPERIENCE
+
+Principal Machine Learning Engineer
+Cognizant Digital Engineering, Hyderabad
+Apr 2022 - Present
+- Stood up the GenAI platform team for a US property & casualty insurer's
+  Hyderabad GCC, growing it from 2 to 11 engineers over eighteen months.
+- Architected a claims-document RAG system over 400,000 policy and claims
+  PDFs, serving 1,800 adjusters with p95 retrieval under 700ms.
+- Ran LoRA fine-tuning of Llama-3 8B on de-identified claims narratives;
+  cut summarisation review time by 34% against the base model in production.
+- Built the model governance process covering drift monitoring, eval gates
+  and audit logging, later adopted across three delivery accounts.
+
+Senior Data Engineer
+Fractal Analytics, Bengaluru
+Jun 2018 - Mar 2022
+- Owned the feature platform for a life insurance underwriting model on
+  Databricks and Delta Lake; 60+ features, daily and streaming pipelines.
+- Introduced CI/CD for model releases with automated regression evaluation.
+- Managed a team of 5 engineers.
+
+Data Engineer
+Mu Sigma, Bengaluru
+Jul 2014 - May 2018
+- ETL and reporting for banking and insurance clients.
+
+EDUCATION
+B.E. Computer Science - BITS Pilani - 2014
+
+SKILLS
+Python, Scala, SQL, PyTorch, Hugging Face, LoRA, QLoRA, LangChain, LlamaIndex,
+Databricks, Spark, Delta Lake, Kubernetes, Terraform, Azure, MLflow, Airflow,
+FAISS, Weaviate, model governance, drift detection
+
+ADDITIONAL
+Notice period: 60 days
+Expected CTC: 98 LPA

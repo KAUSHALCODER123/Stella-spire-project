@@ -13,15 +13,17 @@ from __future__ import annotations
 
 import copy
 import logging
+import threading
 import traceback
 import uuid
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
-from fastapi import FastAPI, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.batch import BATCHES, create_batch, run_batch, status_payload
 from app.config import MODEL_CHOICES, settings
 from app.extract.documents import SUPPORTED_SUFFIXES
 from app.pipeline import Dossier, build_dossier
@@ -104,40 +106,18 @@ def index(request: Request):
 @app.post("/generate")
 async def generate(
     request: Request,
-    cv: Optional[UploadFile] = None,
+    cv: List[UploadFile] = File(default=[]),
     jd_text: str = Form(""),
     anonymise: Optional[str] = Form(None),
-    use_sample: Optional[str] = Form(None),
     model: Optional[str] = Form(None),
 ):
-    cv_sample, jd_sample = _sample_paths()
+    """One CV builds a dossier; several start a batch. Same form either way."""
+    uploads = [f for f in (cv or []) if f and f.filename]
 
-    # --- resolve inputs ---------------------------------------------------
-    if use_sample:
-        cv_path = cv_sample
-        jd_text = jd_sample.read_text(encoding="utf-8")
-        if not cv_path.exists():
-            raise HTTPException(500, "Sample CV missing from data/samples.")
-    else:
-        if cv is None or not cv.filename:
-            return _error(request, "No CV uploaded.", "Choose a PDF, DOCX or TXT file, or run the built-in sample.")
-        suffix = Path(cv.filename).suffix.lower()
-        if suffix not in SUPPORTED_SUFFIXES:
-            return _error(
-                request,
-                "Unsupported file type: {}".format(suffix or "(none)"),
-                "Supported formats are {}.".format(", ".join(sorted(SUPPORTED_SUFFIXES))),
-            )
-        if not jd_text.strip():
-            return _error(request, "No job description.", "Paste the client brief so requirements can be matched against it.")
-
-        payload = await cv.read()
-        if len(payload) > MAX_UPLOAD_BYTES:
-            return _error(request, "File too large.", "The limit is 10 MB; this file is {:.1f} MB.".format(len(payload) / 1e6))
-
-        cv_path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], Path(cv.filename).name)
-        cv_path.write_bytes(payload)
-
+    if not uploads:
+        return _error(request, "No CV uploaded.", "Choose one or more PDF, DOCX or TXT files, or open the sample.")
+    if not jd_text.strip():
+        return _error(request, "No job description.", "Paste the client brief so requirements can be matched against it.")
     if not _has_key():
         return _error(
             request,
@@ -146,11 +126,38 @@ async def generate(
             "Run `python -m scripts.check_setup` to verify it.",
         )
 
-    # --- run --------------------------------------------------------------
+    saved: List[tuple] = []
+    for upload in uploads:
+        suffix = Path(upload.filename).suffix.lower()
+        if suffix not in SUPPORTED_SUFFIXES:
+            return _error(
+                request,
+                "Unsupported file: {}".format(upload.filename),
+                "Supported formats are {}. Remove that file and try again.".format(", ".join(sorted(SUPPORTED_SUFFIXES))),
+            )
+        payload = await upload.read()
+        if len(payload) > MAX_UPLOAD_BYTES:
+            return _error(
+                request,
+                "File too large: {}".format(upload.filename),
+                "The limit is 10 MB; this one is {:.1f} MB.".format(len(payload) / 1e6),
+            )
+        path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], Path(upload.filename).name)
+        path.write_bytes(payload)
+        saved.append((Path(upload.filename).name, path))
+
+    chosen = model if model in {m[0] for m in available_models()} else settings.model
+
+    # --- several CVs: run as a batch, report progress ---------------------
+    if len(saved) > 1:
+        batch = create_batch(files=saved, jd_text=jd_text, model=chosen, anonymise=bool(anonymise))
+        threading.Thread(target=run_batch, args=(batch.id, STORE), daemon=True).start()
+        return RedirectResponse("/batch/{}".format(batch.id), status_code=303)
+
+    # --- one CV: straight through -----------------------------------------
     try:
-        chosen = model if model in {m[0] for m in available_models()} else settings.model
-        dossier = build_dossier(cv_path=cv_path, jd_text=jd_text, model=chosen)
-    except Exception as exc:  # noqa: BLE001 - the UI is the error channel here
+        dossier = build_dossier(cv_path=saved[0][1], jd_text=jd_text, model=chosen)
+    except Exception as exc:  # noqa: BLE001
         log.error("pipeline failed: %s", traceback.format_exc())
         return _error(request, "Could not build the dossier.", str(exc))
 
@@ -158,6 +165,30 @@ async def generate(
     dossier.anonymise = bool(anonymise)  # type: ignore[attr-defined]
     STORE[dossier_id] = dossier
     return RedirectResponse("/dossier/{}".format(dossier_id), status_code=303)
+
+
+@app.get("/batch/{batch_id}", response_class=HTMLResponse)
+def batch_view(request: Request, batch_id: str):
+    batch = BATCHES.get(batch_id)
+    if batch is None:
+        raise HTTPException(404, "Batch not found. It may have been lost on server restart.")
+    return templates.TemplateResponse(
+        request,
+        "batch.html",
+        {
+            "batch": batch,
+            "agency": settings.agency_name,
+            "model": batch.model,
+        },
+    )
+
+
+@app.get("/batch/{batch_id}/status")
+def batch_status(batch_id: str):
+    batch = BATCHES.get(batch_id)
+    if batch is None:
+        raise HTTPException(404, "Batch not found.")
+    return JSONResponse(status_payload(batch))
 
 
 @app.post("/demo")

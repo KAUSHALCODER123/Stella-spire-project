@@ -22,7 +22,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from app.analysis import TimelineAnalysis, build_timeline, derive_risk_flags, sort_flags
 from app.extract import llm
@@ -88,7 +88,15 @@ def build_dossier(
     jd_text: str,
     usage: Optional[llm.Usage] = None,
     model: Optional[str] = None,
+    brief: Optional[JobBrief] = None,
+    on_stage: Optional[Callable[[str], None]] = None,
 ) -> Dossier:
+    """Build one dossier.
+
+    `brief` lets a batch parse the client job description once and reuse it
+    across every candidate, saving N-1 model calls.
+    `on_stage` reports progress for the batch UI.
+    """
     from app.config import settings
 
     started = time.perf_counter()
@@ -96,13 +104,19 @@ def build_dossier(
     model = model or settings.model
     warnings: List[str] = []
 
+    def stage(name: str) -> None:
+        if on_stage:
+            on_stage(name)
+
     # 1. read
+    stage("reading")
     document = extract_text(cv_path)
     warnings.extend(document.warnings)
     if not document.text.strip():
         raise ValueError("No readable text in {}. If this is a scanned PDF, it needs OCR first.".format(Path(cv_path).name))
 
     # 2. extract facts
+    stage("extracting")
     log.info("extracting profile (%d chars)", document.char_count)
     profile = llm.extract_profile(document.text, usage=usage, model=model)
     if not profile.positions:
@@ -112,11 +126,14 @@ def build_dossier(
     timeline = build_timeline(profile)
     computed_flags = derive_risk_flags(profile, timeline)
 
-    # 5. client brief
-    log.info("parsing client brief")
-    brief = llm.extract_job_brief(jd_text, usage=usage, model=model)
+    # 5. client brief -- reused when a batch already parsed it
+    if brief is None:
+        stage("brief")
+        log.info("parsing client brief")
+        brief = llm.extract_job_brief(jd_text, usage=usage, model=model)
 
     # 6. assessment
+    stage("assessing")
     log.info("assessing against %d requirements", len(brief.requirements))
     assessment = llm.assess(
         profile=profile,
@@ -129,6 +146,7 @@ def build_dossier(
 
     # 7. verify every model-written quote actually appears in the CV. The
     #    prompt asks for verbatim quotes; this is what checks.
+    stage("verifying")
     verification = verify_assessment(assessment, document.text, jd_text)
     if verification.unverified:
         warnings.append(
