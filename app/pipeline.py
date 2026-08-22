@@ -165,12 +165,15 @@ def build_dossier(
     model: Optional[str] = None,
     brief: Optional[JobBrief] = None,
     on_stage: Optional[Callable[[str], None]] = None,
+    display_name: Optional[str] = None,
 ) -> Dossier:
     """Build one dossier.
 
     `brief` lets a batch parse the client job description once and reuse it
     across every candidate, saving N-1 model calls.
     `on_stage` reports progress for the batch UI.
+    `display_name` is the filename the user recognises; without it the report
+    would cite the uuid-prefixed name we store on disk.
     """
     from app.config import settings
 
@@ -186,6 +189,8 @@ def build_dossier(
     # 1. read
     stage("reading")
     document = extract_text(cv_path)
+    if display_name:
+        document.filename = display_name
     warnings.extend(document.warnings)
     if not document.text.strip():
         raise ValueError("No readable text in {}. If this is a scanned PDF, it needs OCR first.".format(Path(cv_path).name))

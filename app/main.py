@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 import threading
 import traceback
 import uuid
@@ -20,11 +21,15 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from fastapi.templating import Jinja2Templates
 
 from app.batch import BATCHES, create_batch, run_batch, status_payload
+from app.extract.llm import LLMError
 from app.config import MODEL_CHOICES, settings
+from app.uploads import display_filename, safe_filename, upload_suffix
 from app.extract.documents import SUPPORTED_SUFFIXES
 from app.pipeline import Dossier, build_dossier
 from app.render.dossier import COMPUTED_KINDS, _skills_by_category, candidate_ref, render_html, render_pdf
@@ -41,7 +46,6 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 STORE: Dict[str, Dossier] = {}
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-
 
 def _sample_paths() -> tuple[Path, Path]:
     return (
@@ -211,7 +215,7 @@ async def generate(
 
     saved: List[tuple] = []
     for upload in uploads:
-        suffix = Path(upload.filename).suffix.lower()
+        suffix = upload_suffix(upload.filename)
         if suffix not in SUPPORTED_SUFFIXES:
             return _error(
                 request,
@@ -225,9 +229,10 @@ async def generate(
                 "File too large: {}".format(upload.filename),
                 "The limit is 10 MB; this one is {:.1f} MB.".format(len(payload) / 1e6),
             )
-        path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], Path(upload.filename).name)
+        path = settings.upload_dir / "{}_{}".format(uuid.uuid4().hex[:8], safe_filename(upload.filename))
         path.write_bytes(payload)
-        saved.append((Path(upload.filename).name, path))
+        # Display name stays the original; only the stored path is sanitised.
+        saved.append((Path(upload.filename.replace("\\", "/")).name or "resume", path))
 
     chosen = model if model in {m[0] for m in available_models()} else settings.model
 
@@ -239,10 +244,25 @@ async def generate(
 
     # --- one CV: straight through -----------------------------------------
     try:
-        dossier = build_dossier(cv_path=saved[0][1], jd_text=jd_text, model=chosen)
+        dossier = build_dossier(
+            cv_path=saved[0][1], jd_text=jd_text, model=chosen, display_name=saved[0][0]
+        )
+    except LLMError as exc:
+        log.error("pipeline failed (%s): %s", exc.kind, exc)
+        titles = {
+            "quota": "The AI account is out of credit",
+            "auth": "The API key was not accepted",
+            "model": "That model is not available",
+            "not_a_cv": "That file does not look like a CV",
+            "truncated": "The response was cut off",
+        }
+        return _error(request, titles.get(exc.kind, "The analysis could not be completed"), str(exc))
+    except ValueError as exc:
+        log.warning("unreadable document: %s", exc)
+        return _error(request, "That file could not be read", str(exc))
     except Exception as exc:  # noqa: BLE001
         log.error("pipeline failed: %s", traceback.format_exc())
-        return _error(request, "Could not build the dossier.", str(exc))
+        return _error(request, "The analysis could not be completed", str(exc))
 
     dossier_id = uuid.uuid4().hex[:12]
     dossier.anonymise = bool(anonymise)  # type: ignore[attr-defined]
@@ -362,6 +382,59 @@ def _error(request: Request, title: str, detail: str) -> HTMLResponse:
     ctx = chrome("dashboard")
     ctx.update({"title": title, "detail": detail})
     return templates.TemplateResponse(request, "error.html", ctx, status_code=400)
+
+
+def _wants_html(request: Request) -> bool:
+    """Browsers get the branded page; API clients keep getting JSON."""
+    return "text/html" in request.headers.get("accept", "")
+
+
+_FRIENDLY = {
+    404: ("We could not find that page",
+          "The link may be stale, or the item was lost when the server restarted. "
+          "Dossiers and shortlists are held in memory for the current session only."),
+    405: ("That action is not available here",
+          "This page cannot be reached that way. Head back to the dashboard and try again."),
+}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request: Request, exc: StarletteHTTPException):
+    if not _wants_html(request):
+        return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    title, detail = _FRIENDLY.get(exc.status_code, ("Something went wrong", str(exc.detail)))
+    if exc.status_code == 404 and exc.detail and "not found" in str(exc.detail).lower():
+        detail = str(exc.detail)
+    ctx = chrome("dashboard")
+    ctx.update({"title": title, "detail": detail})
+    return templates.TemplateResponse(request, "error.html", ctx, status_code=exc.status_code)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    if not _wants_html(request):
+        return JSONResponse({"detail": exc.errors()}, status_code=422)
+    ctx = chrome("dashboard")
+    ctx.update({
+        "title": "That request did not look right",
+        "detail": "One of the values in the address bar was not valid. Return to the dashboard and start again.",
+    })
+    return templates.TemplateResponse(request, "error.html", ctx, status_code=422)
+
+
+@app.exception_handler(Exception)
+async def unhandled_error(request: Request, exc: Exception):
+    """Last resort. Never leak a traceback to the browser."""
+    log.error("unhandled error on %s: %s", request.url.path, traceback.format_exc())
+    if not _wants_html(request):
+        return JSONResponse({"detail": "Internal server error"}, status_code=500)
+    ctx = chrome("dashboard")
+    ctx.update({
+        "title": "Something went wrong on our side",
+        "detail": "The error has been logged. Return to the dashboard and try again — "
+                  "if it keeps happening, check the server console for details.",
+    })
+    return templates.TemplateResponse(request, "error.html", ctx, status_code=500)
 
 
 @app.get("/health")

@@ -133,7 +133,7 @@
     <div class="card stat reveal">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></div>
       <div class="v num">{{ stats.dossiers }}</div>
-      <div class="k">Resumes analysed</div>
+      <div class="k">CVs analysed</div>
     </div>
     <div class="card stat reveal">
       <div class="ico violet"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></div>
@@ -148,7 +148,7 @@
     <div class="card stat reveal">
       <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
       <div class="v num">~30s</div>
-      <div class="k">Per resume</div>
+      <div class="k">Per CV</div>
     </div>
   </div>
 
@@ -167,7 +167,7 @@
       <div class="grid" style="gap:18px;">
         <div class="card reveal">
           <div class="card-head">
-            <h2>Upload resumes</h2>
+            <h2>Upload CVs</h2>
             <span class="pill plain">PDF · DOCX · TXT</span>
           </div>
           <div class="card-body">
@@ -180,8 +180,8 @@
                     <path d="M20 16.5A3.5 3.5 0 0 0 17.5 10h-.9A6 6 0 1 0 5 15.9"/>
                   </svg>
                 </div>
-                <div class="big">Drop resumes here, or <u>browse files</u></div>
-                <div class="small">One resume builds a match report. Several build a ranked shortlist.</div>
+                <div class="big">Drop CVs here, or <u>browse files</u></div>
+                <div class="small">One CV builds a match report. Several build a ranked shortlist.</div>
               </div>
               <div class="filelist" id="filelist" hidden></div>
               <div class="filebar" id="filebar" hidden>
@@ -229,7 +229,7 @@
           <div class="card-body">
             <label class="field-label" for="jd">Paste the client brief</label>
             <textarea id="jd" name="jd_text" placeholder="Paste the full job description…">{{ sample_jd }}</textarea>
-            <p class="hint" style="margin:9px 0 0;">Requirements are extracted automatically and matched one by one against each resume.</p>
+            <p class="hint" style="margin:9px 0 0;">Requirements are extracted automatically and matched one by one against each CV.</p>
           </div>
         </div>
 
@@ -239,7 +239,7 @@
             <div class="steps">
               <div class="step">
                 <span class="n">1</span>
-                <div><div class="t">Parse the resume</div>
+                <div><div class="t">Parse the CV</div>
                   <div class="d">Roles, dates, skills and compensation are extracted into a structured profile.</div></div>
               </div>
               <div class="step">
@@ -250,7 +250,7 @@
               <div class="step">
                 <span class="n">3</span>
                 <div><div class="t">Match against the brief</div>
-                  <div class="d">Every requirement is rated, and each rating carries the resume line behind it.</div></div>
+                  <div class="d">Every requirement is rated, and each rating carries the CV line behind it.</div></div>
               </div>
               <div class="step">
                 <span class="n">4</span>
@@ -265,7 +265,7 @@
     </div>
 
     <div class="actions">
-      <button class="btn" type="submit" id="submit" {% if not has_key %}disabled{% endif %}>Analyse resume</button>
+      <button class="btn" type="submit" id="submit" {% if not has_key %}disabled{% endif %}>Analyse CV</button>
       <span class="hint" id="timehint">
         {% if has_key %}Three model calls, about thirty seconds.{% else %}Add an API key to enable analysis.{% endif %}
       </span>
@@ -287,7 +287,7 @@
           <span class="pill {{ r.tone }}">{{ r.percent }}%</span>
         </a>
         {% else %}
-        <div class="empty">No resumes analysed yet.</div>
+        <div class="empty">No CVs analysed yet.</div>
         {% endfor %}
       </div>
     </div>
@@ -305,7 +305,7 @@
           {% if b.running %}<span class="pill info">Running</span>{% else %}<span class="pill ok">Done</span>{% endif %}
         </a>
         {% else %}
-        <div class="empty">No shortlists yet. Upload several resumes at once.</div>
+        <div class="empty">No shortlists yet. Upload several CVs at once.</div>
         {% endfor %}
       </div>
     </div>
@@ -357,16 +357,16 @@
     var total = files.reduce(function (t, f) { return t + f.size; }, 0);
     summary.textContent = n + (n === 1 ? " file" : " files") + " · " + fmt(total);
 
-    if (submit) submit.textContent = n > 1 ? "Analyse " + n + " resumes" : "Analyse resume";
+    if (submit) submit.textContent = n > 1 ? "Analyse " + n + " CVs" : "Analyse CV";
 
     note.hidden = n < 2;
     if (n >= 2) {
-      note.textContent = n + " resumes will be analysed four at a time against one brief, then ranked into a " +
+      note.textContent = n + " CVs will be analysed four at a time against one brief, then ranked into a " +
         "shortlist. The job description is read once and shared, saving " + (n - 1) + " model calls.";
     }
     if (timehint && !submit.disabled) {
       timehint.textContent = n > 1
-        ? "About " + Math.max(1, Math.round(Math.ceil(n / 4) * 0.6)) + " minute(s) for " + n + " resumes."
+        ? "About " + Math.max(1, Math.round(Math.ceil(n / 4) * 0.6)) + " minute(s) for " + n + " CVs."
         : "Three model calls, about thirty seconds.";
     }
   }

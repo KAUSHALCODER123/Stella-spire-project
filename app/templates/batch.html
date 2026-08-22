@@ -25,7 +25,7 @@
   .prow.is-done .state { color: var(--ok); }
   .prow.is-failed .state { color: var(--bad); }
 
-  /* Stage beads: filled as each resume advances, the active one breathing so
+  /* Stage beads: filled as each CV advances, the active one breathing so
      a slow model call still reads as alive rather than stalled. */
   .beads { display: flex; gap: 4px; }
   .bead { width: 20px; height: 4px; border-radius: 999px; background: var(--border);
@@ -117,7 +117,7 @@
   <!-- ============================ RUNNING ============================ -->
   <div id="progress-card" class="card reveal" {% if not batch.running %}hidden{% endif %}>
     <div class="card-head">
-      <h2>Analysing resumes</h2>
+      <h2>Analysing CVs</h2>
       <span class="hint">Four at a time · <span id="clock" class="num">{{ batch.elapsed | int }}</span>s elapsed</span>
     </div>
     <div class="card-body">

@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from app.extract.llm import Usage, extract_job_brief
+from app.extract.llm import LLMError, Usage, extract_job_brief
 from app.pipeline import Dossier, build_dossier
 from app.schemas import JobBrief
 
@@ -86,6 +86,7 @@ class Batch:
     started_at: float = field(default_factory=time.time)
     finished_at: Optional[float] = None
     error: Optional[str] = None
+    error_kind: str = "error"
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     # --- progress ---------------------------------------------------------
@@ -160,14 +161,21 @@ def run_batch(batch_id: str, store: Dict[str, Dossier]) -> None:
         log.info("batch %s: brief parsed, %d requirements", batch.id, len(batch.brief.requirements))
     except Exception as exc:  # noqa: BLE001
         log.error("batch %s: brief failed: %s", batch.id, exc)
-        batch.error = "Could not read the job description: {}".format(exc)
+        # Report the real cause. An account-level problem (no credits, bad
+        # key) is not "the job description could not be parsed", and saying so
+        # sends the user debugging the wrong thing.
+        kind = getattr(exc, "kind", "error")
+        batch.error = str(exc) if kind in ("quota", "auth", "model") else (
+            "The job description could not be read: {}".format(exc))
+        batch.error_kind = kind
         batch.finished_at = time.time()
         for item in batch.items:
             item.status = "failed"
-            item.error = "Not attempted - the brief could not be parsed."
+            item.error = "Not analysed - the run stopped before this resume was reached."
         return
 
     def work(item: BatchItem) -> None:
+        # A per-resume failure must not stop the rest of the run.
         started = time.perf_counter()
         item.status = "running"
         item.stage = "reading"
@@ -178,6 +186,7 @@ def run_batch(batch_id: str, store: Dict[str, Dossier]) -> None:
                 model=batch.model,
                 brief=batch.brief,
                 on_stage=lambda s: setattr(item, "stage", s),
+                display_name=item.filename,
             )
             dossier_id = uuid.uuid4().hex[:12]
             dossier.anonymise = batch.anonymise  # type: ignore[attr-defined]

@@ -55,9 +55,10 @@ def redact_text(
     if not text:
         return text
 
-    for variant in _name_variants(full_name):
-        text = re.sub(r"\b" + re.escape(variant) + r"\b", replacement, text, flags=re.IGNORECASE)
-
+    # Contact details FIRST. An address like arjun.menon.ml@gmail.com contains
+    # the candidate's name, so redacting names first shreds it into
+    # "[candidate].[candidate].[email]" -- ugly, and it still leaks the shape
+    # of the original.
     if email:
         text = text.replace(email, "[email]")
     if phone:
@@ -69,6 +70,24 @@ def redact_text(
     text = _URL_RE.sub("[profile]", text)
     text = _PHONE_RE.sub("[phone]", text)
 
+    # Names last, on whatever is left.
+    for variant in _name_variants(full_name):
+        text = re.sub(r"\b" + re.escape(variant) + r"\b", replacement, text, flags=re.IGNORECASE)
+
+    return _fix_sentence_case(text, replacement)
+
+
+def _fix_sentence_case(text: str, replacement: str) -> str:
+    """Capitalise the placeholder when it opens a sentence.
+
+    A name replaced by "the candidate" mid-paragraph is fine, but at the start
+    of a sentence it reads as a typo -- and this prose goes to clients.
+    """
+    if not replacement or not replacement[:1].islower():
+        return text
+    capped = replacement[0].upper() + replacement[1:]
+    text = re.sub(r"(^|[.!?]\s+|\n\s*)" + re.escape(replacement),
+                  lambda m: m.group(1) + capped, text)
     return text
 
 
@@ -76,13 +95,18 @@ def _redact_list(values: Iterable[str], **kw) -> List[str]:
     return [redact_text(v, **kw) or "" for v in values]
 
 
-def redact_dossier(dossier) -> None:
+def redact_dossier(dossier, replacement: str = "the candidate") -> None:
     """Redact a Dossier's generated prose in place.
 
     Call only on a copy destined for a blind rendering -- this mutates.
     """
     profile = dossier.profile
-    kw = {"full_name": profile.full_name, "email": profile.email, "phone": profile.phone}
+    kw = {
+        "full_name": profile.full_name,
+        "email": profile.email,
+        "phone": profile.phone,
+        "replacement": replacement,
+    }
 
     a = dossier.assessment
     a.executive_summary = redact_text(a.executive_summary, **kw) or ""

@@ -230,7 +230,7 @@
         {% else %}<span class="pill plain">n/a</span>{% endif %}
       </div>
       <div class="v num">{% if v %}{{ v.verified }}<span style="font-size:16px;color:var(--ink-4);font-weight:600;">/{{ v.total }}</span>{% else %}—{% endif %}</div>
-      <div class="sub">quotes found in the source resume</div>
+      <div class="sub">quotes found in the source CV</div>
       <div class="bar"><i class="{{ 'ok' if v and v.rate >= 0.9 else 'warn' }}" data-w="{{ ((v.rate if v else 0) * 100) | round | int }}"></i></div>
     </div>
   </div>
@@ -265,7 +265,7 @@
                   <button class="ev" type="button" data-goto="{{ v.by_quote[m.evidence] }}">“{{ m.evidence }}”</button>
                   <div class="tags">
                     {% if tr.source == 'brief' %}<span class="pill info">From the brief</span>
-                    {% else %}<span class="pill accent">Verified in resume</span>{% endif %}
+                    {% else %}<span class="pill accent">Verified in CV</span>{% endif %}
                   </div>
                 {% else %}
                   <div class="ev unver">“{{ m.evidence }}”</div>
@@ -346,7 +346,7 @@
         {% endfor %}
         <p class="hint" style="margin:16px 0 0;">
           Filled chips are demonstrated in described work. Dashed chips appear in the skills list with no supporting detail found —
-          the fastest signal of an inflated resume.
+          the fastest signal of an inflated CV.
         </p>
       </div>
     </div>
@@ -389,7 +389,7 @@
       <div class="card-body">
         <div class="trustbar">
           <span style="font-size:19px;font-weight:700;" class="num">{{ v.verified }}/{{ v.total }}</span>
-          <span class="hint" style="font-size:13.5px;">quotes located in the source resume</span>
+          <span class="hint" style="font-size:13.5px;">quotes located in the source CV</span>
           <span class="b bar"><i class="{{ 'ok' if v.rate >= 0.9 else 'warn' }}" data-w="{{ (v.rate * 100) | round | int }}"></i></span>
           {% if v.unverified %}<span class="pill bad">{{ v.unverified | length }} unverified</span>
           {% else %}<span class="pill ok">All verified</span>{% endif %}
@@ -424,7 +424,7 @@
 
       <div class="card" style="position:sticky; top:96px;">
         <div class="card-head">
-          <h2>Source resume</h2>
+          <h2>Source CV</h2>
           <span class="pill plain">{{ dossier.document.source_format | upper }}</span>
         </div>
         <div class="scroller" id="source-scroll">{{ source_html | safe }}</div>

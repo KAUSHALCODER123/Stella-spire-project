@@ -37,7 +37,40 @@ _client: Optional[OpenAI] = None
 
 
 class LLMError(RuntimeError):
-    """Raised when the model could not produce usable output."""
+    """Raised when the model could not produce usable output.
+
+    `kind` lets the interface say something specific and actionable instead of
+    a generic failure. "quota" and "auth" in particular are account problems,
+    not application problems, and telling the user they are the same thing
+    sends them debugging entirely the wrong layer.
+    """
+
+    def __init__(self, message: str, kind: str = "error") -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+def _classify_rate_limit(exc: Exception) -> Optional[LLMError]:
+    """A 429 is not always a rate limit.
+
+    OpenAI returns `insufficient_quota` as a 429, which the SDK surfaces as
+    RateLimitError. That is permanent until someone adds credit, so retrying
+    it just delays a failure that was never going to succeed.
+    """
+    text = str(exc).lower()
+    if "insufficient_quota" in text or "credit balance" in text or "no credits remaining" in text:
+        return LLMError(
+            "This OpenAI account has no credits remaining, so the analysis could not run. "
+            "Add credit at platform.openai.com/settings/organization/billing, then try again.",
+            kind="quota",
+        )
+    if "exceeded your current quota" in text:
+        return LLMError(
+            "This OpenAI account has exceeded its quota. Check your plan and billing limits "
+            "at platform.openai.com, then try again.",
+            kind="quota",
+        )
+    return None
 
 
 @dataclass
@@ -63,8 +96,8 @@ def get_client() -> OpenAI:
     if _client is None:
         if not settings.openai_api_key:
             raise LLMError(
-                "No OPENAI_API_KEY found. Copy .env.example to .env and put your key in it, "
-                "then restart the server."
+                "No OPENAI_API_KEY found. Copy .env.example to .env, add your key, and restart the server.",
+                kind="auth",
             )
         _client = OpenAI(api_key=settings.openai_api_key, timeout=180.0)
     return _client
@@ -94,25 +127,51 @@ def _parse(
                 max_output_tokens=max_tokens or settings.max_tokens,
                 text_format=output_format,
             )
-        except (openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError) as exc:
+        except openai.RateLimitError as exc:
+            fatal = _classify_rate_limit(exc)
+            if fatal is not None:
+                # Permanent until billing changes. Fail immediately.
+                log.error("%s: %s", label, fatal)
+                raise fatal from exc
+            last_error = exc
+            log.warning("%s: rate limited on attempt %d, retrying", label, attempt)
+            continue
+        except (openai.APIConnectionError, openai.APITimeoutError) as exc:
             last_error = exc
             log.warning("%s: transient failure on attempt %d (%s)", label, attempt, type(exc).__name__)
             continue
+        except openai.AuthenticationError as exc:
+            raise LLMError(
+                "The OpenAI API key was rejected. Check OPENAI_API_KEY in your .env file, "
+                "then restart the server and run `python -m scripts.check_setup`.",
+                kind="auth",
+            ) from exc
+        except openai.NotFoundError as exc:
+            raise LLMError(
+                "The model '{}' is not available to this API key. Run "
+                "`python -m scripts.check_setup` to see which models you can use.".format(model),
+                kind="model",
+            ) from exc
         except openai.LengthFinishReasonError as exc:
             # The schema was not finished before the token ceiling. Retrying at
             # the same ceiling would fail identically, so fail loudly instead.
             raise LLMError(
-                "{}: ran out of output tokens before completing the schema. "
-                "Raise MAX_TOKENS in .env (currently {}).".format(label, max_tokens or settings.max_tokens)
+                "The response was cut off before it was complete. Raise MAX_TOKENS in .env "
+                "(currently {}) and try again.".format(max_tokens or settings.max_tokens),
+                kind="truncated",
             ) from exc
         except openai.APIStatusError as exc:
-            raise LLMError("{} failed: {}".format(label, exc)) from exc
+            raise LLMError("The API returned an error ({}): {}".format(exc.status_code, exc), kind="api") from exc
 
         # A refusal or a truncated response comes back as HTTP 200. Guard
         # before touching the parsed output.
         if getattr(response, "status", None) == "incomplete":
             detail = getattr(response, "incomplete_details", None)
-            raise LLMError("{}: response incomplete ({}).".format(label, getattr(detail, "reason", "unknown")))
+            raise LLMError(
+                "The response was incomplete ({}). Try again, or raise MAX_TOKENS in .env.".format(
+                    getattr(detail, "reason", "unknown")),
+                kind="truncated",
+            )
 
         if usage is not None:
             usage.add(label, response)
@@ -120,13 +179,17 @@ def _parse(
         parsed = getattr(response, "output_parsed", None)
         if parsed is None:
             last_error = LLMError(
-                "{}: the model returned no structured output. This usually means the uploaded "
-                "document is not a CV.".format(label)
+                "The model returned no structured output. This usually means the uploaded file "
+                "is not a CV.", kind="not_a_cv",
             )
             continue
         return parsed
 
-    raise LLMError("{} failed after 2 attempts: {}".format(label, last_error))
+    raise LLMError(
+        "The model did not respond after two attempts. This is usually a temporary network or "
+        "rate-limit problem — wait a moment and try again. ({}: {})".format(label, last_error),
+        kind="transient",
+    )
 
 
 # --------------------------------------------------------------------------

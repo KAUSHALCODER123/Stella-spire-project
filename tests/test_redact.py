@@ -140,3 +140,51 @@ def test_identified_source_pane_keeps_the_name():
     d = sample_dossier()
     html = render_source(d.document.text, d.verification)
     assert "ARJUN MENON" in html
+
+
+# --- ordering: contacts before names --------------------------------------
+
+
+def test_email_is_redacted_whole_not_shredded_by_the_name():
+    """Regression: arjun.menon.ml@gmail.com contains the candidate's name, so
+    redacting names first produced '[candidate].[candidate].[email]'."""
+    out = redact_text("Reach them at arjun.menon.ml@gmail.com today", **KW)
+    assert "[email]" in out
+    assert "the candidate." not in out
+    assert "[candidate]." not in out
+    assert out.count("[email]") == 1
+
+
+def test_contact_line_redacts_cleanly():
+    line = "Bengaluru, Karnataka | arjun.menon.ml@gmail.com | +91 98450 22417"
+    out = redact_text(line, **KW)
+    assert out == "Bengaluru, Karnataka | [email] | [phone]"
+
+
+def test_third_party_email_containing_no_name_still_redacted():
+    out = redact_text("Referred by priya.s@fintrail.io", **KW)
+    assert "priya.s@fintrail.io" not in out and "[email]" in out
+
+
+# --- sentence case ---------------------------------------------------------
+
+
+def test_placeholder_is_capitalised_at_the_start_of_a_sentence():
+    out = redact_text("Arjun Menon is an ML engineer.", replacement="the candidate", **KW)
+    assert out.startswith("The candidate is"), out
+
+
+def test_placeholder_capitalised_after_a_full_stop():
+    out = redact_text("We met. Arjun Menon leads the team.", replacement="the candidate", **KW)
+    assert "We met. The candidate leads" in out, out
+
+
+def test_placeholder_stays_lowercase_mid_sentence():
+    out = redact_text("The report on Arjun Menon is ready.", replacement="the candidate", **KW)
+    assert "on the candidate is ready" in out, out
+
+
+def test_bracket_placeholder_is_left_alone():
+    """'[candidate]' is a redaction marker, not prose; do not case-fix it."""
+    out = redact_text("Arjun Menon is here.", replacement="[candidate]", **KW)
+    assert out.startswith("[candidate]")
