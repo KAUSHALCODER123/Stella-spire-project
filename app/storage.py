@@ -19,6 +19,7 @@ import logging
 import mimetypes
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -66,9 +67,21 @@ class SupabaseStorage:
             headers["x-upsert"] = "true"
         return headers
 
+    def _object_url(self, prefix: str, bucket: str, key: str) -> str:
+        """Percent-encode the key.
+
+        Filenames legal on a filesystem are not automatically legal in a URL:
+        "Arjun Menon CV.txt" is a perfectly good file and an invalid URL, and
+        urllib rejects it outright. Almost every real CV filename has a space
+        in it, so this is the common case rather than the edge case.
+        """
+        return "{}/storage/v1/{}/{}/{}".format(
+            self.base, prefix, quote(bucket, safe=""), quote(key.lstrip("/"), safe="/")
+        )
+
     def upload(self, bucket: str, key: str, payload: bytes, content_type: Optional[str] = None) -> str:
         """Store bytes. Returns the object key. Raises on failure."""
-        url = "{}/storage/v1/object/{}/{}".format(self.base, bucket, key.lstrip("/"))
+        url = self._object_url("object", bucket, key)
         request = urllib.request.Request(
             url, data=payload, method="POST",
             headers=self._headers(content_type or "application/octet-stream"),
@@ -79,13 +92,13 @@ class SupabaseStorage:
         return key
 
     def download(self, bucket: str, key: str) -> bytes:
-        url = "{}/storage/v1/object/{}/{}".format(self.base, bucket, key.lstrip("/"))
+        url = self._object_url("object", bucket, key)
         request = urllib.request.Request(url, headers=self._headers(), method="GET")
         with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
             return response.read()
 
     def public_url(self, bucket: str, key: str) -> str:
-        return "{}/storage/v1/object/public/{}/{}".format(self.base, bucket, key.lstrip("/"))
+        return self._object_url("object/public", bucket, key)
 
     def check(self) -> dict:
         """Is the connection usable? Used by scripts/check_setup."""

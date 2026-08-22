@@ -165,3 +165,60 @@ def test_check_reports_a_real_outage_as_broken(configured, monkeypatch):
 
 def test_check_reports_missing_configuration():
     assert SupabaseStorage("", "").check()["ok"] is False
+
+
+# Characters RFC 3986 forbids in a URL path. Any of these surviving into a
+# request means the key was not encoded.
+ILLEGAL_IN_URL = ' "<>^`{|}' + chr(92)
+
+
+# --- URL encoding ----------------------------------------------------------
+
+
+def test_a_filename_with_spaces_produces_a_valid_url(configured, monkeypatch, tmp_path):
+    """Regression: "Arjun Menon CV.txt" is a legal filename and an illegal URL.
+
+    urllib raises InvalidURL on the raw space, so every real CV -- almost all
+    of which have spaces in the name -- silently failed to archive while the
+    space-free probe passed.
+    """
+    seen = {}
+
+    def fake_open(request, timeout=None):
+        seen["url"] = request.full_url
+        return FakeResponse(200)
+
+    monkeypatch.setattr(configured.urllib.request, "urlopen", fake_open)
+    path = tmp_path / "ff9d_Arjun Menon CV.txt"
+    result = store_document(payload=b"B", filename="Arjun Menon CV.txt",
+                            kind="resume", local_path=path)
+
+    assert result.archived, result.error
+    assert " " not in seen["url"], seen["url"]
+    assert "%20" in seen["url"]
+
+
+@pytest.mark.parametrize("name", [
+    "Arjun Menon CV.txt",
+    "CV (final) v2.pdf",
+    "Résumé Ann.pdf",
+    "cv#1&2.docx",
+    "cv+plus.txt",
+])
+def test_awkward_filenames_all_produce_valid_urls(configured, monkeypatch, tmp_path, name):
+    seen = {}
+    monkeypatch.setattr(configured.urllib.request, "urlopen",
+                        lambda r, timeout=None: (seen.update(url=r.full_url), FakeResponse(200))[1])
+    from app.uploads import safe_filename
+    path = tmp_path / ("aaaa_" + safe_filename(name))
+    result = store_document(payload=b"B", filename=name, kind="resume", local_path=path)
+    assert result.archived, result.error
+    url = seen["url"]
+    assert not any(c in url for c in ILLEGAL_IN_URL), url
+
+
+def test_public_url_is_encoded_too(configured):
+    client = SupabaseStorage("https://example.supabase.co", "k")
+    url = client.public_url("resumes", "Arjun Menon CV.txt")
+    assert " " not in url and "%20" in url
+    assert url.startswith("https://example.supabase.co/storage/v1/object/public/resumes/")
