@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     openai_api_key: str = ""
+    # Any OpenAI-compatible endpoint. Blank means OpenAI itself.
+    # OpenRouter: https://openrouter.ai/api/v1
+    # NVIDIA NIM: https://integrate.api.nvidia.com/v1
+    openai_base_url: str = ""
 
     # Overridable from .env, and per-run from the UI. Run
     # `python -m scripts.check_setup` to see which models your key can reach.
@@ -55,14 +59,23 @@ class Settings(BaseSettings):
 
 # Offered in the UI model picker. Each supports json_schema structured output.
 MODEL_CHOICES = [
-    ("gpt-4o", "GPT-4o", "Balanced. The default."),
-    ("gpt-4o-mini", "GPT-4o mini", "Cheapest. Fine for bulk extraction."),
+    # --- OpenAI ---------------------------------------------------------
+    ("gpt-4o", "GPT-4o", "Balanced."),
+    ("gpt-4o-mini", "GPT-4o mini", "Cheapest OpenAI option."),
     ("gpt-4.1", "GPT-4.1", "Stronger long-document reading."),
     ("gpt-4.1-mini", "GPT-4.1 mini", "Cheaper 4.1."),
-    ("gpt-5", "GPT-5", "Better judgement on the assessment pass."),
+    ("gpt-5", "GPT-5", "Better judgement."),
     ("gpt-5-mini", "GPT-5 mini", "Cheaper GPT-5."),
     ("gpt-5.4", "GPT-5.4", "Newer frontier model."),
-    ("gpt-5.5", "GPT-5.5", "Newest frontier model. Highest cost."),
+    ("gpt-5.5", "GPT-5.5", "Newest frontier model."),
+    # --- OpenRouter free tier -------------------------------------------
+    # Only models that advertise structured_outputs are listed: the pipeline
+    # is built on schema-constrained generation and silently degrades to
+    # nothing without it. Verified working via responses.parse.
+    ("nvidia/nemotron-3-super-120b-a12b:free", "Nemotron 3 Super 120B (free)", "262k context. No cost."),
+    ("dots-studio/dots-3-note-preview:free", "Dots 3 Note (free)", "512k context. No cost."),
+    ("z-ai/glm-5.2:free", "GLM 5.2 (free)", "256k context. No cost."),
+    ("nvidia/nemotron-nano-9b-v2:free", "Nemotron Nano 9B (free)", "Fast and small. No cost."),
 ]
 
 

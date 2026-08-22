@@ -27,6 +27,8 @@ _PRICES = {
 
 
 def _cost(model: str, tin: int, tout: int) -> str:
+    if model.endswith(":free"):
+        return "free (OpenRouter free tier)"
     for prefix, (pin, pout) in _PRICES.items():
         if model.startswith(prefix):
             usd = tin / 1e6 * pin + tout / 1e6 * pout

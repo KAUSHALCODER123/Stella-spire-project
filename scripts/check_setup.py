@@ -36,9 +36,14 @@ def main() -> int:
     key = settings.openai_api_key
     print("OK    Key loaded ({}...{}, {} chars)".format(key[:7], key[-4:], len(key)))
 
-    from openai import OpenAI
+    # Use the app's own client so the configured base URL (OpenRouter, NVIDIA
+    # NIM, anything OpenAI-compatible) is honoured. Building a fresh client
+    # here silently tested openai.com instead of the provider in use.
+    from app.extract.llm import get_client
 
-    client = OpenAI(api_key=key, timeout=60.0)
+    client = get_client()
+    if settings.openai_base_url:
+        print("OK    Provider: {}".format(settings.openai_base_url))
 
     # --- what can this key see? -------------------------------------------
     try:

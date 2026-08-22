@@ -22,7 +22,7 @@ from typing import List, Optional, TypeVar
 
 import openai
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.analysis import TimelineAnalysis
 from app.config import settings
@@ -103,7 +103,12 @@ def get_client() -> OpenAI:
                 "No OPENAI_API_KEY found. Copy .env.example to .env, add your key, and restart the server.",
                 kind="auth",
             )
-        _client = OpenAI(api_key=settings.openai_api_key, timeout=180.0)
+        kwargs = {"api_key": settings.openai_api_key, "timeout": 180.0}
+        if settings.openai_base_url:
+            # OpenRouter, NVIDIA NIM, or anything else speaking the same
+            # protocol. Everything downstream is unchanged.
+            kwargs["base_url"] = settings.openai_base_url
+        _client = OpenAI(**kwargs)
     return _client
 
 
@@ -117,12 +122,20 @@ def _parse(
     max_tokens: Optional[int] = None,
     model: Optional[str] = None,
 ) -> T:
-    """One structured call, with one retry on a transient failure."""
+    """One structured call, retried on transient and malformed-output failures.
+
+    Providers differ in how they enforce a schema. OpenAI constrains decoding,
+    so the JSON is valid by construction. OpenRouter's free models mostly
+    prompt for it, and intermittently emit something that does not parse -- a
+    doubled opening brace was the first failure seen in practice. That is
+    stochastic rather than systematic, so it is worth another attempt; the
+    request is otherwise identical and the next sample is usually clean.
+    """
     client = get_client()
     model = model or settings.model
     last_error: Optional[Exception] = None
 
-    for attempt in (1, 2):
+    for attempt in (1, 2, 3):
         try:
             response = client.responses.parse(
                 model=model,
@@ -166,6 +179,13 @@ def _parse(
             ) from exc
         except openai.APIStatusError as exc:
             raise LLMError("The API returned an error ({}): {}".format(exc.status_code, exc), kind="api") from exc
+        except ValidationError as exc:
+            # The provider returned something that is not the schema. Common on
+            # providers that prompt for JSON rather than constrain decoding.
+            last_error = exc
+            log.warning("%s: malformed output on attempt %d (%s), retrying",
+                        label, attempt, str(exc).splitlines()[0][:80])
+            continue
 
         # A refusal or a truncated response comes back as HTTP 200. Guard
         # before touching the parsed output.
@@ -189,8 +209,15 @@ def _parse(
             continue
         return parsed
 
+    if isinstance(last_error, ValidationError):
+        raise LLMError(
+            "The model '{}' returned output that did not match the required schema, three times "
+            "running. Some providers only prompt for JSON rather than enforcing it. Try a larger "
+            "model, or one whose provider supports strict structured output.".format(model),
+            kind="schema",
+        )
     raise LLMError(
-        "The model did not respond after two attempts. This is usually a temporary network or "
+        "The model did not respond after three attempts. This is usually a temporary network or "
         "rate-limit problem — wait a moment and try again. ({}: {})".format(label, last_error),
         kind="transient",
     )
