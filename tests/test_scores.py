@@ -181,3 +181,42 @@ def test_skill_stats_split_evidenced_from_listed():
     st = sample_dossier().skill_stats
     assert st["evidenced"] + st["listed_only"] == st["total"]
     assert 0.0 <= st["ratio"] <= 1.0
+
+
+# --- the break must survive all the way to the client's copy ---------------
+
+
+def test_effective_is_present_even_when_the_brief_states_no_minimum():
+    """Templates read this on every path; a missing key renders blank."""
+    exp = empty_dossier().experience_match
+    assert "effective" in exp
+    assert exp["effective"] == exp["actual"]
+
+
+def test_effective_is_the_figure_the_verdict_was_reached_on():
+    d = sample_dossier()
+    d.brief.stated_min_years = 15
+    exp = d.experience_match
+    assert exp["effective"] == exp["span"] > exp["actual"]
+    assert exp["effective"] >= exp["required"]
+
+
+def test_the_client_facing_document_states_span_not_billed_months():
+    """The PDF is where a career break is most costly if it is misreported.
+
+    Showing worked months alone re-imposes the penalty the arithmetic removes,
+    at the one step the candidate never sees.
+    """
+    from app.render.dossier import build_context, render_html
+
+    d = sample_dossier()
+    d.brief.stated_min_years = 15
+    exp = d.experience_match
+
+    ctx = build_context(d, anonymise=True)
+    assert ctx["experience"]["effective"] == exp["span"]
+
+    html = render_html(d, anonymise=True)
+    assert str(exp["span"]) in html, "career span missing from the dossier"
+    assert "{}-mo break".format(exp["months_out"]) in html
+    assert "not seniority lost" in html, "the policy is not stated anywhere a client can read it"

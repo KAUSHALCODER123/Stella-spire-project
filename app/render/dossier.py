@@ -152,6 +152,10 @@ def build_context(dossier: Dossier, *, anonymise: Optional[bool] = None) -> Dict
         "brief": dossier.brief,
         "assessment": dossier.assessment,
         "timeline": dossier.timeline,
+        # The document a client actually reads. Without this the glance
+        # panel shows billed months alone, which re-introduces the exact
+        # career-break penalty the arithmetic exists to remove.
+        "experience": dossier.experience_match,
         "flags": dossier.flags,
         "counts": counts,
         "coverage": coverage,

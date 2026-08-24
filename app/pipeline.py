@@ -98,8 +98,12 @@ class Dossier:
         actual = self.timeline.total_experience_years
         span = self.timeline.career_span_years
         out = self.timeline.months_out_of_work
+        # `effective` is the figure every verdict is actually reached on, so it
+        # belongs in the dict on every path. Leaving it out when no minimum is
+        # stated makes a template that reads it render blank rather than fail.
         base = {"required": None, "actual": actual, "span": span, "months_out": out,
-                "ratio": 1.0, "verdict": "not specified", "shortfall": 0.0}
+                "ratio": 1.0, "verdict": "not specified", "shortfall": 0.0,
+                "effective": max(actual, span) if out else actual}
         if not required:
             return base
 

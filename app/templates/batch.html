@@ -208,7 +208,13 @@
               {{ d.matched_requirements | length }}/{{ d.assessment.requirement_matches | length }}</span></td>
             <td>
               {% set ex = d.experience_match %}
-              <span class="pill {{ 'ok' if ex.verdict == 'meets' else ('warn' if ex.verdict == 'close' else 'bad') }}">{{ ex.actual }}y</span>
+              {# The verdict is reached on `effective`, so show that figure. A
+                 green pill reading the worked-years number next to a higher bar
+                 looks like a scoring bug rather than a deliberate policy. #}
+              <span class="pill {{ 'ok' if ex.verdict == 'meets' else ('warn' if ex.verdict == 'close' else 'bad') }}"
+                    {% if ex.months_out %}title="{{ ex.actual }}y worked · {{ ex.months_out }}-month break counted as career span"{% endif %}>
+                {{ ex.effective }}y{% if ex.months_out %} <span aria-hidden="true">·</span>{% endif %}
+              </span>
             </td>
             <td>
               {% if d.verification and d.verification.total %}
