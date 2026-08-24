@@ -193,3 +193,33 @@ def test_no_api_key_gives_an_actionable_message(client, monkeypatch):
 
 def test_candidates_page_lists_the_demo_report(client, demo_id):
     assert "/dossier/{}".format(demo_id) in client.get("/candidates", headers=HTML).text
+
+
+# --- the demo's opening screen --------------------------------------------
+
+
+def test_the_prefilled_sample_pair_exists_on_disk():
+    """The workspace falls back to an empty brief box if these go missing.
+
+    That degrades silently, so a rename during a re-vertical would leave the
+    main screen blank with nothing failing anywhere.
+    """
+    from app.main import _sample_paths
+
+    cv, jd = _sample_paths()
+    assert cv.exists(), "sample CV missing at {}".format(cv)
+    assert jd.exists(), "sample JD missing at {}".format(jd)
+
+
+def test_the_prefilled_brief_is_in_the_vertical_being_sold():
+    """A finance consultancy's main screen must not open on an ML role."""
+    from app.main import _sample_paths
+
+    _, jd = _sample_paths()
+    text = jd.read_text(encoding="utf-8").lower()
+    assert any(term in text for term in ("cfo", "finance", "financial")), text[:200]
+
+
+def test_the_workspace_actually_renders_that_brief(client):
+    body = client.get("/workspace").text
+    assert "Chief Financial Officer" in body or "CFO" in body

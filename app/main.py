@@ -158,9 +158,15 @@ def run_in_background(target, *args) -> None:
 
 
 def _sample_paths() -> tuple[Path, Path]:
+    """The pair the workspace opens with.
+
+    These must stay in the vertical the product is being shown in: the JD here
+    is prefilled into the brief box, so it is the first thing anyone reads on
+    the main screen.
+    """
     return (
-        settings.sample_dir / "cv_arjun_menon.txt",
-        settings.sample_dir / "jd_genai_platform_lead.txt",
+        settings.sample_dir / "cv_meera_ramanathan.txt",
+        settings.sample_dir / "jd_cfo_fintech_gcc.txt",
     )
 
 

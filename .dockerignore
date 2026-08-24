@@ -1,0 +1,38 @@
+# The image is built on Linux; almost nothing in a Windows working tree
+# belongs in it. Without this file `COPY . .` ships the virtualenv and the
+# whole git history, which makes every Render build slower for no benefit.
+
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+
+.git/
+.gitignore
+.github/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Secrets never enter the image. Render supplies them as environment
+# variables; .env.example is documentation and stays.
+.env
+*.db
+
+# Working scratch. The durable copies live in Supabase storage, and the
+# container recreates these directories at build time.
+data/uploads/*
+data/out/*
+
+# Local editor and OS noise.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+*.md
+!README.md
