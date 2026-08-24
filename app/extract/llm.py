@@ -323,11 +323,23 @@ def assess(
         "Write the assessment. Every 'strong' and 'partial' verdict needs a verbatim quote "
         "from the raw CV text above."
     ).format(
-        # TOON rather than JSON: these two blocks are mostly uniform arrays
-        # (requirements, positions, skills), which collapse into tables that
-        # name their fields once instead of per row. Measured at 32% fewer
-        # tokens on the real payloads. Input only -- the response stays
-        # schema-constrained JSON.
+        # TOON rather than JSON for the structured blocks. Input only -- the
+        # response stays schema-constrained JSON.
+        #
+        # Re-measured with scripts/measure_toon.py (tiktoken o200k_base), and
+        # the honest figures are much smaller than the 32% this comment used
+        # to claim. That number was against pretty-printed JSON; against the
+        # compact JSON you would actually send:
+        #
+        #   brief    -19%   requirements are uniform and do collapse
+        #   profile   +7%   WORSE -- positions and skills do not collapse,
+        #                   because exclude_none leaves rows with different
+        #                   key sets, and positions holds a nested list
+        #   whole assessment prompt: -0.2%, i.e. nothing
+        #
+        # So this buys readability, not tokens. Kept because the tabular form
+        # is easier to eyeball when debugging a prompt, but it should not be
+        # described as a cost optimisation anywhere.
         brief=encode_model(brief),
         timeline=_timeline_block(timeline),
         profile=encode_model(profile),

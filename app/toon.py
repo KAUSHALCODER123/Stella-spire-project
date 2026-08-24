@@ -11,9 +11,25 @@ objects into a table that names its fields once:
       {"name":"SQL","category":"data"}    SQL,data
     ]
 
-Every repetition of a key across rows disappears. This project's prompts are
-mostly uniform arrays -- positions, skills, requirements -- so that is exactly
-where the tokens are.
+Every repetition of a key across rows disappears -- when the rows really are
+uniform, which in this project is rarer than it looks.
+
+What `scripts/measure_toon.py` actually measures (tiktoken o200k_base, against
+the compact JSON you would otherwise send):
+
+* A job brief comes out ~20% smaller. Its `requirements` are uniform and do
+  collapse into a table.
+* An extracted profile comes out ~7% LARGER. `positions` can never collapse
+  because it holds a nested `achievements` list, and neither positions nor
+  skills are uniform once `exclude_none` has dropped different optional keys
+  from different rows.
+* An assessment prompt sends exactly one brief and one profile, so the two
+  effects cancel: the measured end-to-end difference is -0.2%.
+
+So this is a readability choice, not a cost optimisation. The tabular form is
+genuinely easier to scan when debugging a prompt, which is why it is still
+here, but any claim about token savings should be checked against the script
+before it is repeated.
 
 INPUT ONLY. Model output stays JSON: schema-constrained generation is what
 guarantees the response parses, and giving that up to save output tokens

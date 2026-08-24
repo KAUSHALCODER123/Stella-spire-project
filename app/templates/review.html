@@ -240,7 +240,11 @@
         {% else %}<span class="pill plain">n/a</span>{% endif %}
       </div>
       <div class="v num">{% if v %}{{ v.verified }}<span style="font-size:16px;color:var(--ink-4);font-weight:600;">/{{ v.total }}</span>{% else %}—{% endif %}</div>
-      <div class="sub">quotes found in the source CV</div>
+      <div class="sub">
+        quotes located in the source CV
+        <br><span class="policy">Every claim is checked against the document. Anything
+        that cannot be found is marked unverified, not passed on as fact.</span>
+      </div>
       <div class="bar"><i class="{{ 'ok' if v and v.rate >= 0.9 else 'warn' }}" data-w="{{ ((v.rate if v else 0) * 100) | round | int }}"></i></div>
     </div>
   </div>
@@ -410,7 +414,8 @@
       <div class="card-body">
         <div class="trustbar">
           <span style="font-size:19px;font-weight:700;" class="num">{{ v.verified }}/{{ v.total }}</span>
-          <span class="hint" style="font-size:13.5px;">quotes located in the source CV</span>
+          <span class="hint" style="font-size:13.5px;">quotes matched back to the source CV —
+            an unverified claim is flagged, never quietly dropped</span>
           <span class="b bar"><i class="{{ 'ok' if v.rate >= 0.9 else 'warn' }}" data-w="{{ (v.rate * 100) | round | int }}"></i></span>
           {% if v.unverified %}<span class="pill bad">{{ v.unverified | length }} unverified</span>
           {% else %}<span class="pill ok">All verified</span>{% endif %}
