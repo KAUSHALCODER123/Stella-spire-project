@@ -1,0 +1,22 @@
+MOHAMMED ARIF
+Hyderabad | m.arif.fin@example.com | +91 96420 33110
+
+EMPLOYMENT HISTORY
+
+Company              | Role                        | From     | To
+---------------------|-----------------------------|----------|----------
+Kotak Mahindra Bank  | VP, Financial Reporting     | Sep 2021 | Present
+IndusInd Bank        | Senior Manager, Reporting   | Apr 2016 | Aug 2021
+Deloitte India       | Assistant Manager, Audit    | Jul 2012 | Mar 2016
+
+ACHIEVEMENTS
+- Ind AS 109 ECL model governance across the retail book.
+- Cut regulatory return preparation from 9 days to 3.
+
+CREDENTIALS
+Chartered Accountant, ICAI, 2012
+
+SKILLS
+Ind AS 109, ECL, regulatory reporting, banking finance, Basel III, SQL
+
+Notice period: 60 days | Expected CTC: 88 LPA

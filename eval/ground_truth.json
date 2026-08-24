@@ -1,0 +1,169 @@
+{
+  "_about": [
+    "Hand-labelled expected values for eval/cases/*.txt, read off each CV by eye.",
+    "",
+    "`difficulty` names what each case is actually testing, so a regression can be",
+    "attributed to a cause rather than just a lower number. `skills_must_include`",
+    "is a recall floor on the terms a recruiter would search for -- skill",
+    "extraction is partly subjective, so exact-set matching would measure",
+    "agreement with my taste rather than correctness.",
+    "",
+    "Limitation, stated up front: these CVs are synthetic. They were written to",
+    "exercise known failure modes (column interleaving, abbreviated dates,",
+    "year-only ranges, tabular roles, promotions within one employer), not",
+    "sampled from real applications, so the numbers describe the extractor",
+    "against those failure modes and not against the true distribution of CVs."
+  ],
+  "cases": [
+    {
+      "id": "01_clean",
+      "difficulty": "baseline: conventional layout, unambiguous dates",
+      "full_name": "Rahul Deshpande",
+      "email": "rahul.deshpande@example.com",
+      "phone_digits": "919822011447",
+      "notice_period_days": 90,
+      "current_ctc_lpa": 42,
+      "positions": [
+        {"company": "Sanchit Industries", "title": "Financial Controller", "start": "2021-04", "end": "present"},
+        {"company": "BSR & Co.", "title": "Assistant Manager, Audit", "start": "2016-07", "end": "2021-03"}
+      ],
+      "skills_must_include": ["Ind AS", "statutory audit", "SAP"]
+    },
+    {
+      "id": "02_two_column",
+      "difficulty": "two-column layout: sidebar interleaves into the body text",
+      "full_name": "Anita Krishnamurthy",
+      "email": "anita.k@example.com",
+      "phone_digits": "919900123456",
+      "notice_period_days": 60,
+      "expected_ctc_lpa": 70,
+      "positions": [
+        {"company": "Veritas Finance", "title": "Head of FP&A", "start": "2020-01", "end": "present"},
+        {"company": "Shriram City Union Finance", "title": "Manager, Business Finance", "start": "2013-06", "end": "2019-12"}
+      ],
+      "skills_must_include": ["FP&A", "Anaplan", "SQL"]
+    },
+    {
+      "id": "03_abbrev_dates",
+      "difficulty": "abbreviated dates with apostrophes and en-dashes: Mar'21 – Present",
+      "full_name": "S. Venkataraman",
+      "email": "venkat.raman@example.com",
+      "phone_digits": "919003155882",
+      "notice_period_days": 60,
+      "current_ctc_lpa": 55,
+      "expected_ctc_lpa": 72,
+      "positions": [
+        {"company": "Nuvei Payments India", "title": "Group Financial Controller", "start": "2021-03", "end": "present"},
+        {"company": "Razorpay", "title": "Senior Manager Finance", "start": "2017-08", "end": "2021-02"},
+        {"company": "ICICI Bank", "title": "Deputy Manager", "start": "2012-06", "end": "2017-07"}
+      ],
+      "skills_must_include": ["IFRS", "consolidation", "reconciliation"]
+    },
+    {
+      "id": "04_year_only",
+      "difficulty": "year-only ranges: the month has to be inferred as 01 and noted",
+      "full_name": "Priyanka Sethi",
+      "email": "priyanka.sethi@example.com",
+      "phone_digits": "919811077219",
+      "notice_period_days": 90,
+      "positions": [
+        {"company": "Lumina Health", "title": "Director of Finance", "start": "2022-01", "end": "present"},
+        {"company": "Medanta Labs", "title": "Head of Finance", "start": "2018-01", "end": "2022-01"},
+        {"company": "Fortis Healthcare", "title": "Finance Manager", "start": "2014-01", "end": "2018-01"},
+        {"company": "Walker Chandiok", "title": "Article Assistant", "start": "2011-01", "end": "2014-01"}
+      ],
+      "skills_must_include": ["budgeting", "controllership", "GST"]
+    },
+    {
+      "id": "05_table_roles",
+      "difficulty": "employment history in a pipe-delimited table rather than prose",
+      "full_name": "Mohammed Arif",
+      "email": "m.arif.fin@example.com",
+      "phone_digits": "919642033110",
+      "notice_period_days": 60,
+      "expected_ctc_lpa": 88,
+      "positions": [
+        {"company": "Kotak Mahindra Bank", "title": "VP, Financial Reporting", "start": "2021-09", "end": "present"},
+        {"company": "IndusInd Bank", "title": "Senior Manager, Reporting", "start": "2016-04", "end": "2021-08"},
+        {"company": "Deloitte India", "title": "Assistant Manager, Audit", "start": "2012-07", "end": "2016-03"}
+      ],
+      "skills_must_include": ["Ind AS 109", "ECL", "regulatory reporting"]
+    },
+    {
+      "id": "06_career_break",
+      "difficulty": "an explicit career break section between two roles",
+      "full_name": "Sneha Iyer",
+      "email": "sneha.iyer.ca@example.com",
+      "phone_digits": "919740066231",
+      "notice_period_days": 30,
+      "positions": [
+        {"company": "Ather Energy", "title": "Finance Manager", "start": "2023-11", "end": "present"},
+        {"company": "Titan Company", "title": "Assistant Finance Manager", "start": "2016-08", "end": "2020-12"},
+        {"company": "Deloitte Haskins & Sells", "title": "Article Assistant", "start": "2013-07", "end": "2016-07"}
+      ],
+      "skills_must_include": ["cost accounting", "IFRS", "SAP"],
+      "expect_break_noted": true
+    },
+    {
+      "id": "07_odd_headings",
+      "difficulty": "non-standard section headings and conversational date wording",
+      "full_name": "Deepak Malhotra",
+      "email": "deepak.malhotra@example.com",
+      "phone_digits": "919999140028",
+      "notice_period_days": 60,
+      "current_ctc_lpa": 76,
+      "expected_ctc_lpa": 95,
+      "positions": [
+        {"company": "Zenith Mobility", "title": "Head of Corporate Finance", "start": "2022-02", "end": "present"},
+        {"company": "Ola Electric", "title": "Senior Manager, Corporate Finance", "start": "2018-05", "end": "2022-01"},
+        {"company": "EY India", "title": "Consultant, Transaction Advisory", "start": "2014-09", "end": "2018-04"}
+      ],
+      "skills_must_include": ["financial modelling", "due diligence", "valuation"]
+    },
+    {
+      "id": "08_promotions",
+      "difficulty": "three promotions inside one employer, nested under a company header",
+      "full_name": "Lakshmi Narayanan",
+      "email": "lakshmi.n@example.com",
+      "phone_digits": "918939021764",
+      "notice_period_days": 90,
+      "current_ctc_lpa": 92,
+      "positions": [
+        {"company": "Flipkart", "title": "Director, Financial Planning & Analysis", "start": "2022-07", "end": "present"},
+        {"company": "Flipkart", "title": "Senior Manager, FP&A", "start": "2019-04", "end": "2022-06"},
+        {"company": "Flipkart", "title": "Manager, Business Finance", "start": "2015-08", "end": "2019-03"},
+        {"company": "Genpact", "title": "Assistant Manager, Financial Analysis", "start": "2011-06", "end": "2015-07"}
+      ],
+      "skills_must_include": ["FP&A", "Anaplan", "SQL"]
+    },
+    {
+      "id": "09_overlapping",
+      "difficulty": "a concurrent non-executive role overlapping the main one",
+      "full_name": "Neha Bhatt",
+      "email": "neha.bhatt.fin@example.com",
+      "phone_digits": "919879530012",
+      "notice_period_days": 90,
+      "positions": [
+        {"company": "Rivona Textiles", "title": "Chief Financial Officer", "start": "2020-06", "end": "present"},
+        {"company": "Sarvottam Ceramics Ltd", "title": "Independent Director (Audit Committee)", "start": "2021-09", "end": "present"},
+        {"company": "Arvind Limited", "title": "Vice President, Finance", "start": "2014-04", "end": "2020-05"},
+        {"company": "Torrent Pharmaceuticals", "title": "Manager, Finance", "start": "2009-07", "end": "2014-03"}
+      ],
+      "skills_must_include": ["treasury", "working capital", "forex hedging"]
+    },
+    {
+      "id": "10_terse",
+      "difficulty": "extremely terse: one line per role, no phone, year-only dates",
+      "full_name": "K. Subramanian",
+      "email": "ksubramanian@example.com",
+      "phone_digits": null,
+      "notice_period_days": 45,
+      "positions": [
+        {"company": "Chargebee", "title": "Finance Lead", "start": "2021-01", "end": "present"},
+        {"company": "Freshworks", "title": "Manager Finance", "start": "2017-01", "end": "2021-01"},
+        {"company": "PwC", "title": "Associate", "start": "2013-01", "end": "2017-01"}
+      ],
+      "skills_must_include": ["revenue recognition", "NetSuite"]
+    }
+  ]
+}

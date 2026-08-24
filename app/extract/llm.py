@@ -71,7 +71,34 @@ def _classify_rate_limit(exc: Exception) -> Optional[LLMError]:
             "at platform.openai.com, then try again.",
             kind="quota",
         )
+    # OpenRouter's free tier caps requests per DAY. Retrying inside the next
+    # few seconds cannot possibly clear it, so treat it as permanent and say
+    # when it lifts rather than burning three attempts to learn nothing.
+    if "free-models-per-day" in text or "openrouter_free_tier_daily" in text:
+        return LLMError(
+            "The OpenRouter free-model daily limit is used up{}. Wait for the reset, "
+            "add credit at openrouter.ai/settings/credits, or point OPENAI_BASE_URL "
+            "and OPENAI_API_KEY at a paid account.".format(_reset_hint(text)),
+            kind="quota",
+        )
     return None
+
+
+def _reset_hint(text: str) -> str:
+    """Turn the epoch in X-RateLimit-Reset into something a human can act on."""
+    import datetime
+    import re
+
+    found = re.search(r"'x-ratelimit-reset':\s*'(\d{10,13})'", text)
+    if not found:
+        return ""
+    stamp = int(found.group(1))
+    seconds = stamp / 1000 if stamp > 10_000_000_000 else stamp
+    try:
+        when = datetime.datetime.fromtimestamp(seconds).astimezone()
+    except (OverflowError, OSError, ValueError):
+        return ""
+    return " until {}".format(when.strftime("%d %b %H:%M %Z"))
 
 
 @dataclass

@@ -89,9 +89,33 @@ mid-demo.
 pytest -q
 ```
 
-41 tests, **no API key and no network required**. They cover the deterministic
-layer and the redaction guarantee — the two parts of the output most likely to
-be challenged, and the two parts that must never be wrong.
+397 tests, **no API key and no network required**. They cover the deterministic
+layer, the redaction guarantee, and the eval scorer — the parts of the output
+most likely to be challenged, and the parts that must never be wrong.
+
+### Measuring extraction accuracy
+
+```bash
+python -m eval.run_eval                 # all cases, default extraction model
+python -m eval.run_eval --model gpt-4o  # compare models
+python -m eval.run_eval --case 05_table_roles
+```
+
+`eval/cases/` holds ten finance CVs written to break the extractor in ten
+specific ways — two-column interleaving, `Mar'21 – Present`, year-only ranges,
+roles in a pipe table, an explicit career break, headings like "WHERE I'VE
+WORKED", three promotions inside one employer, a concurrent directorship, and a
+CV terse enough to be one line per role. `eval/ground_truth.json` holds the
+hand-labelled answers; the runner scores name, email, phone, position count,
+company, title, start date, end date, key-skill recall, and the stated CTC and
+notice figures, then prints per-field accuracy and names every miss against the
+case that produced it.
+
+The scorer is itself tested (`tests/test_eval_scoring.py`, no API calls): a
+profile built from the ground truth must score 100%, and each single-field
+mutation — a dropped role, an invented role, an off-by-one-month start date, a
+truncated title — must be caught in the right field. A scorer nobody checked
+produces a number that merely looks like evidence.
 
 ## Layout
 
@@ -112,6 +136,10 @@ app/
 tests/
   fixtures.py           A complete hand-built dossier, so the renderer can be
                         iterated with zero token spend
+eval/
+  cases/                Ten CVs, each breaking the extractor a different way
+  ground_truth.json     Hand-labelled answers, with the limitation stated in it
+  run_eval.py           Per-field scoring; names every miss
 scripts/
   check_setup.py        Preflight
 data/samples/           Sample CV + GCC brief in Stellaspire's verticals
@@ -134,15 +162,31 @@ useful than one that claims not to have any.
   than allowed to yield an empty dossier. No OCR yet.
 - **`title_inflation` uses a keyword seniority ladder**, which will misjudge
   unusual title conventions. An explicitly stated team size suppresses the flag.
-- **Extraction accuracy is not yet measured.** The eval harness is the next
-  piece of work; measured per-field numbers will be published in this section.
-  Until they are, treat the extraction as unquantified.
+- **The eval cases are synthetic.** They were written to exercise known
+  failure modes, not sampled from real applications, so the numbers describe the
+  extractor against those failure modes rather than against the true
+  distribution of CVs. A real-world sample would be the honest next step.
+- **Extraction accuracy is measured but not yet published here.** The harness
+  above runs; the numbers are pending a model budget (the OpenRouter free tier
+  caps at 50 requests a day). Until a run is published in this section, treat
+  the extraction as unquantified — the harness existing is not the same as the
+  measurement having been taken.
 
 ## Status
 
 Working end to end: ingestion, extraction, arithmetic, assessment, HTML and PDF
-rendering, blind mode.
+rendering, blind mode. On top of that: the web review UI, company accounts with
+a single sign-in, role posting and applications, batch mode (N candidates
+against one brief), M×N matching with the free constraint gate and affinity
+screen in front of it, TOON-encoded prompts, and Supabase persistence for
+accounts, roles, applicants and dossiers.
 
-Next: the evaluation harness (hand-labelled ground truth over ~20 CVs, per-field
-accuracy reported here), the web review UI, and batch mode — ranking N
-candidates against one brief.
+Next, in order:
+
+1. **Publish measured extraction accuracy.** The harness and its ground truth
+   are written and the scorer is tested; the run itself is pending a model
+   budget. Until the numbers are in this file, the accuracy claim is not made.
+2. **A real-world CV sample.** The current eval cases are synthetic by
+   construction, which bounds what the numbers can be said to prove.
+3. **OCR for scanned PDFs**, which today are detected and refused rather than
+   silently producing an empty dossier.
