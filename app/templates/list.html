@@ -26,7 +26,12 @@
 {% block chrome %}
 <div class="topbar">
   <div><div class="crumb">Workspace</div><h1>{{ heading }}</h1></div>
-  <div class="acts"><a class="btn" href="/">New analysis</a></div>
+  <div class="acts">
+    {% if show_match_demo %}
+    <form method="post" action="/match/demo"><button class="btn ghost" type="submit">View sample match run</button></form>
+    {% endif %}
+    <a class="btn" href="/">New analysis</a>
+  </div>
 </div>
 {% endblock %}
 {% block content %}

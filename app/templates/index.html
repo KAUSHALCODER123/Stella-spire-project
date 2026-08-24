@@ -121,7 +121,11 @@
     <h1>Dashboard</h1>
   </div>
   <div class="acts">
+    {# Both demo paths run on stored fixtures and cost nothing, which is what
+       makes them the safe thing to show when a provider is unreachable. The
+       many-to-many one had no button at all and was reachable only by POST. #}
     <form method="post" action="/demo"><button class="btn ghost" type="submit">View sample report</button></form>
+    <form method="post" action="/match/demo"><button class="btn ghost" type="submit">View sample match run</button></form>
   </div>
 </div>
 {% endblock %}

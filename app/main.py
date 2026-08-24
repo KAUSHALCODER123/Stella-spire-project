@@ -551,6 +551,9 @@ def shortlists(request: Request):
     ctx = chrome("shortlists", request)
     ctx.update({
         "heading": "Shortlists", "rows": rows,
+        # The zero-cost many-to-many run belongs here, where someone
+        # looking for match results would actually go for it.
+        "show_match_demo": True,
         "empty_title": "No shortlists yet",
         "empty_detail": "Upload several resumes at once to rank them against one brief.",
     })
@@ -1022,11 +1025,16 @@ def match_demo(request: Request):
         id="demo-" + uuid.uuid4().hex[:6], model=settings.model, anonymise=False,
         requisitions=[], candidates=[],
     )
+    # Tie each demo requisition back to the seeded role it stands for. Without
+    # this the employer view shows no matched candidates, which is the one beat
+    # of the demo that proves a client sees only their own shortlist.
+    by_title = {rc.role_title: rid for rid, rc in ROLE_LIBRARY.items()}
     for i, (title, client, constraints, _) in enumerate(roles):
         b = _copy.deepcopy(base.brief)
         b.role_title, b.client_name = title, client
-        run.requisitions.append(Requisition(index=i, filename="{}.txt".format(title), jd_text="",
-                                            brief=b, constraints=constraints))
+        run.requisitions.append(Requisition(
+            index=i, filename="{}.txt".format(title), jd_text="", brief=b,
+            constraints=constraints, source_role_id=by_title.get(title)))
     for i, (name, years, prefs) in enumerate(people):
         prof = _copy.deepcopy(base.profile)
         prof.full_name = name

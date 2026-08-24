@@ -266,3 +266,25 @@ def test_a_free_model_run_reports_no_cost_rather_than_a_guess(client):
 
     body = client.get("/match/{}".format(run_id)).text
     assert "₹0" in body
+
+
+def test_the_demo_match_populates_each_employers_own_shortlist(client):
+    """Tenant isolation is the demo's strongest beat and must cost nothing.
+
+    Without source_role_id on the demo requisitions the employer dashboard is
+    empty, so the claim "a client sees only their own candidates" cannot be
+    shown without spending tokens on a live run.
+    """
+    import html as _html
+
+    client.post("/match/demo", follow_redirects=False)
+    client.post("/logout", follow_redirects=False)
+
+    client.post("/login", data={"email": "careers@alderline.example", "password": "admin123"},
+                follow_redirects=False)
+    alderline = _html.unescape(client.get("/dashboard").text)
+
+    assert "Financial Controller" in alderline
+    assert "Head of Financial Planning & Analysis" in alderline
+    # Meridian's opening must not appear on Alderline's dashboard.
+    assert "Chief Financial Officer" not in alderline
