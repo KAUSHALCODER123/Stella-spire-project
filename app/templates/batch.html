@@ -7,6 +7,7 @@
   .sc { padding: 18px 20px; }
   .sc .v { font-size: 25px; font-weight: 700; letter-spacing: -.028em; line-height: 1.1; }
   .sc .k { font-size: 12.5px; color: var(--ink-3); margin-top: 3px; }
+  .sc .n { font-size: 11.5px; color: var(--ink-4); margin-top: 5px; line-height: 1.35; }
 
   /* ---------- progress ---------- */
   .runbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
@@ -162,9 +163,11 @@
       <div class="v num countup" data-to="{{ batch.usage.calls }}">0</div>
       <div class="k">Model calls</div>
     </div>
+    {% set spend = price_usage(batch.usage, model) %}
     <div class="card sc reveal">
-      <div class="v num">₹{{ ((batch.usage.input_tokens / 1000000 * 2.5 + batch.usage.output_tokens / 1000000 * 10) * 88) | round(2) }}</div>
-      <div class="k">Approx. cost</div>
+      <div class="v num">{{ spend.inr_display }}</div>
+      <div class="k">{% if spend.free %}Cost{% else %}Approx. cost{% endif %}</div>
+      {% if not spend.known %}<div class="n">{{ model }} is not in the price table</div>{% endif %}
     </div>
   </div>
 

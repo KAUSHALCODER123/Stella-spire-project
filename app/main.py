@@ -60,6 +60,7 @@ from app.storage import get_storage, store_document
 from app.uploads import display_filename, safe_filename, upload_suffix
 from app.extract.documents import SUPPORTED_SUFFIXES, extract_text
 from app.pipeline import Dossier, build_dossier
+from app.pricing import price_usage
 from app.render.dossier import COMPUTED_KINDS, _skills_by_category, candidate_ref, render_html, render_pdf
 from app.render.source import render_source
 from app.render.redact import redact_dossier, redact_text
@@ -88,6 +89,10 @@ app.add_middleware(
 )
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+# Cost belongs in one place. Templates previously inlined a GPT-4o rate,
+# which quietly invented a rupee figure for runs on the free tier.
+templates.env.globals["price_usage"] = price_usage
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 STORE: Dict[str, Dossier] = {}
@@ -964,36 +969,84 @@ def match_demo(request: Request):
 
     import copy as _copy
 
+    from app.intake import check_constraints
     from app.matching import Affinity
     from app.matchrun import Candidate, MatchRun, Pair, Requisition
     from tests.fixtures import sample_dossier
 
     base = sample_dossier()
+
+    # Finance leadership, matching the vertical the rest of the product is in.
+    # The constraints are real: the gate below is the same code the live path
+    # runs, so what this demo shows being ruled out for free actually was.
     roles = [
-        ("GenAI Platform Lead", "Confidential GCC (US insurer)", [82, 55, None]),
-        ("Senior ML Engineer", "FinTech, Bengaluru", [74, 68, 31]),
-        ("VP Finance", "NBFC, Mumbai", [None, None, None]),
+        ("Chief Financial Officer", "Meridian Global Capability Centre",
+         RoleConstraints(role_title="Chief Financial Officer", client_name="Meridian GCC",
+                         location="Bengaluru", work_mode="hybrid", min_years=15,
+                         ctc_min_lpa=95, ctc_max_lpa=130, max_notice_days=90),
+         [88, 61, None, None]),
+        ("Head of Financial Planning & Analysis", "Alderline NBFC",
+         RoleConstraints(role_title="Head of FP&A", client_name="Alderline NBFC",
+                         location="Mumbai", work_mode="onsite", min_years=8, max_years=15,
+                         ctc_min_lpa=55, ctc_max_lpa=80, max_notice_days=60),
+         [70, 79, 44, None]),
+        ("Financial Controller", "Alderline NBFC",
+         RoleConstraints(role_title="Financial Controller", client_name="Alderline NBFC",
+                         location="Mumbai", work_mode="hybrid", min_years=7,
+                         ctc_min_lpa=40, ctc_max_lpa=62, max_notice_days=90),
+         [None, 58, 66, None]),
     ]
-    people = [("Arjun Menon", 8.4), ("Priya Raghavan", 11.9), ("Meera Kulkarni", 7.0)]
+
+    # One of these is priced out of every band and one will not leave Dubai,
+    # so the free gate has something real to do rather than reporting zero.
+    people = [
+        ("Meera Ramanathan", 13.3, CandidatePreferences(
+            full_name="Meera Ramanathan", current_location="Bengaluru", work_mode="hybrid",
+            notice_period_days=60, expected_ctc_lpa=105, min_acceptable_ctc_lpa=95,
+            years_experience=13.3)),
+        ("Anita Krishnamurthy", 11.2, CandidatePreferences(
+            full_name="Anita Krishnamurthy", current_location="Mumbai", work_mode="onsite",
+            open_to_relocate=True, notice_period_days=60, expected_ctc_lpa=70,
+            min_acceptable_ctc_lpa=58, years_experience=11.2)),
+        ("Sneha Iyer", 8.1, CandidatePreferences(
+            full_name="Sneha Iyer", current_location="Mumbai", work_mode="hybrid",
+            open_to_relocate=True, notice_period_days=30, expected_ctc_lpa=52,
+            min_acceptable_ctc_lpa=44, years_experience=8.1)),
+        ("Daniel Okonkwo", 9.6, CandidatePreferences(
+            full_name="Daniel Okonkwo", current_location="Dubai", preferred_locations=["Dubai"],
+            open_to_relocate=False, work_mode="onsite", notice_period_days=30,
+            expected_ctc_lpa=140, min_acceptable_ctc_lpa=135, years_experience=9.6)),
+    ]
 
     run = MatchRun(
         id="demo-" + uuid.uuid4().hex[:6], model=settings.model, anonymise=False,
         requisitions=[], candidates=[],
     )
-    for i, (title, client, _) in enumerate(roles):
+    for i, (title, client, constraints, _) in enumerate(roles):
         b = _copy.deepcopy(base.brief)
         b.role_title, b.client_name = title, client
-        run.requisitions.append(Requisition(index=i, filename="{}.txt".format(title), jd_text="", brief=b))
-    for i, (name, years) in enumerate(people):
+        run.requisitions.append(Requisition(index=i, filename="{}.txt".format(title), jd_text="",
+                                            brief=b, constraints=constraints))
+    for i, (name, years, prefs) in enumerate(people):
         prof = _copy.deepcopy(base.profile)
         prof.full_name = name
         tl = _copy.deepcopy(base.timeline)
         tl.total_experience_months = int(years * 12)
         run.candidates.append(Candidate(index=i, filename="{}.pdf".format(name.split()[0].lower()),
-                                        path=Path("."), profile=prof, timeline=tl, document=base.document))
+                                        path=Path("."), profile=prof, timeline=tl,
+                                        document=base.document, prefs=prefs))
 
-    for ri, (_, _, scores) in enumerate(roles):
+    for ri, (_, _, constraints, scores) in enumerate(roles):
         for ci, pct in enumerate(scores):
+            # The free gate first, exactly as the live path orders it: a pair
+            # blocked on stated facts never reaches a model at all.
+            check = check_constraints(run.candidates[ci].prefs, constraints)
+            if check.blocked:
+                run.pairs.append(Pair(candidate_index=ci, requisition_index=ri,
+                                      affinity=Affinity(score=0.0, term_ratio=0.0),
+                                      selected=False, status="blocked", check=check,
+                                      reason=check.blocks[0]))
+                continue
             if pct is None:
                 aff = Affinity(score=0.11, term_ratio=0.0)
                 run.pairs.append(Pair(candidate_index=ci, requisition_index=ri, affinity=aff,

@@ -223,3 +223,46 @@ def test_the_prefilled_brief_is_in_the_vertical_being_sold():
 def test_the_workspace_actually_renders_that_brief(client):
     body = client.get("/workspace").text
     assert "Chief Financial Officer" in body or "CFO" in body
+
+
+# --- the zero-cost demo must show the free gate doing something ------------
+
+
+def test_the_demo_match_exercises_the_real_constraint_gate(client):
+    """A flagship stat reading zero in the demo undersells the feature.
+
+    The gate is the cheapest thing the product does and the easiest to
+    overlook, so the demo has to show it actually eliminating pairs -- with
+    reasons the live code computed, not reasons written into a fixture.
+    """
+    from app.main import RUNS
+
+    resp = client.post("/match/demo", follow_redirects=False)
+    run = RUNS[resp.headers["location"].rsplit("/", 1)[-1]]
+
+    assert run.blocked_pairs, "the free gate ruled nothing out"
+    for pair in run.blocked_pairs:
+        assert pair.check is not None and pair.check.blocked
+        assert any(ch.isdigit() for ch in pair.reason), pair.reason
+
+
+def test_the_demo_match_is_in_the_finance_vertical(client):
+    from app.main import RUNS
+
+    resp = client.post("/match/demo", follow_redirects=False)
+    run = RUNS[resp.headers["location"].rsplit("/", 1)[-1]]
+    titles = " ".join(r.title for r in run.requisitions).lower()
+    assert "financial" in titles or "finance" in titles
+    assert "ml engineer" not in titles and "genai" not in titles
+
+
+def test_a_free_model_run_reports_no_cost_rather_than_a_guess(client):
+    """The old template applied a GPT-4o rate to whatever had run."""
+    from app.main import RUNS
+
+    resp = client.post("/match/demo", follow_redirects=False)
+    run_id = resp.headers["location"].rsplit("/", 1)[-1]
+    RUNS[run_id].model = "dots-studio/dots-3-note-preview:free"
+
+    body = client.get("/match/{}".format(run_id)).text
+    assert "₹0" in body

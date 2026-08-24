@@ -151,11 +151,24 @@
       <div class="k">Full assessments</div>
     </div>
     <div class="card sc reveal">
+      <div class="v num">{{ run.blocked_pairs | length }}</div>
+      <div class="k">Ruled out for free</div>
+      {% if run.blocked_pairs %}
+      <div class="n">on stated salary, notice, location or seniority — no model call</div>
+      {% endif %}
+    </div>
+    <div class="card sc reveal">
       <div class="v num">{{ cost.total }}</div>
       <div class="k">Model calls</div>
       {% if cost.naive_total > cost.total %}
-      <div class="n">{{ cost.naive_total - cost.total }} saved by screening</div>
+      <div class="n">{{ cost.naive_total - cost.total }} avoided of {{ cost.naive_total }}</div>
       {% endif %}
+    </div>
+    {% set spend = price_usage(run.usage, model) %}
+    <div class="card sc reveal">
+      <div class="v num">{{ spend.inr_display }}</div>
+      <div class="k">{% if spend.free %}Cost{% else %}Approx. cost{% endif %}</div>
+      {% if not spend.known %}<div class="n" style="color:var(--ink-4);font-weight:400;">{{ model }} is not in the price table</div>{% endif %}
     </div>
     <div class="card sc reveal">
       <div class="v num">{{ run.elapsed | int }}s</div>
