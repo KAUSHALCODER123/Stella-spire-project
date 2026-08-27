@@ -66,6 +66,7 @@ from app.render.dossier import COMPUTED_KINDS, _skills_by_category, candidate_re
 from app.render.source import render_source
 from app.render.redact import redact_dossier, redact_text
 from app.verify import verify_assessment
+from app.notify import NotifyError, is_configured as is_email_configured, send_application_received
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("spiredossier")
@@ -495,7 +496,7 @@ def workspace(request: Request):
 
 
 @app.get("/candidates", response_class=HTMLResponse)
-def candidates(request: Request, role_id: Optional[str] = None):
+def candidates(request: Request, role_id: Optional[str] = None, notified: Optional[int] = None):
     company, redirect = require_admin(request)
     if redirect is not None:
         return redirect
@@ -544,6 +545,8 @@ def candidates(request: Request, role_id: Optional[str] = None):
         "selected_role_id": role_id or "",
         "selected_role_title": selected_role.role_title if selected_role else "",
         "model_choices": available_models(),
+        "notified": notified,
+        "email_configured": is_email_configured(),
     })
     return templates.TemplateResponse(request, "candidates.html", ctx)
 
@@ -593,6 +596,47 @@ def match_selected_applicants(
 
     run_in_background(execute_run, run.id, STORE)
     return RedirectResponse("/match/{}".format(run.id), status_code=303)
+
+
+@app.post("/candidates/notify")
+def notify_selected_applicants(
+    request: Request,
+    role_id: str = Form(""),
+    applicant_ids: List[str] = Form(default=[]),
+):
+    """Send a hand-picked set of applicants a plain applied-confirmation email.
+
+    No verdict, no shortlist claim -- just "your CV arrived and is under
+    review". Low enough stakes to send before any scoring has happened.
+    """
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
+    chosen_ids = [aid for aid in applicant_ids if aid in APPLICANTS]
+    if not chosen_ids:
+        return _error(request, "No candidates selected.",
+                      "Select at least one applicant to email.")
+    if not is_email_configured():
+        return _error(request, "Email is not configured.",
+                      "Add GMAIL_ADDRESS and GMAIL_APP_PASSWORD to .env and restart the server.")
+
+    role_title = ROLE_LIBRARY[role_id].role_title if role_id in ROLE_LIBRARY else "the role"
+    sent = 0
+    for aid in chosen_ids:
+        prefs = APPLICANTS[aid]["prefs"]
+        if not prefs.email:
+            continue
+        try:
+            send_application_received(
+                to_email=prefs.email, candidate_name=prefs.full_name or "", role_title=role_title,
+            )
+            sent += 1
+        except NotifyError as exc:
+            return _error(request, "Could not send email", str(exc))
+
+    return RedirectResponse(
+        "/candidates?role_id={}&notified={}".format(role_id, sent), status_code=303,
+    )
 
 
 @app.get("/shortlists", response_class=HTMLResponse)

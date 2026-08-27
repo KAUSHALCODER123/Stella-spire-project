@@ -36,6 +36,7 @@
   .gate.bad { color: var(--bad); background: var(--bad-50); }
   .filterbar { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border-2); }
   .filterbar select { flex: 1; }
+  .notice.ok { background: var(--ok-50); border-color: #CCEBE0; color: #0B6B4C; }
   .matchbar { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .matchbar .hint { margin: 0; }
 </style>
@@ -73,11 +74,26 @@
     </div>
   </div>
 
+  {% if notified is not none %}
+  <div class="notice ok" style="margin-bottom:18px;">
+    {% if notified > 0 %}
+      Sent {{ notified }} applicant{{ '' if notified == 1 else 's' }} a confirmation email.
+    {% else %}
+      No email was sent — none of the selected applicants had an email address on file.
+    {% endif %}
+  </div>
+  {% endif %}
+
   <div class="card reveal">
     <div class="card-head">
       <h2>Applied, awaiting match</h2>
       <span class="hint">{{ applicants|length }} in the pool</span>
     </div>
+
+    {% if not email_configured %}
+    <p class="hint" style="padding:10px 20px 0;">Email notifications are off — add GMAIL_ADDRESS and
+       GMAIL_APP_PASSWORD to .env to enable "Email selected".</p>
+    {% endif %}
 
     <form method="get" action="/candidates" class="filterbar">
       <select name="role_id" onchange="this.form.submit()">
@@ -132,6 +148,10 @@
             {% endfor %}
           </select>
           <label class="check"><input type="checkbox" name="anonymise" checked><span class="t">Blind</span></label>
+          <button class="btn ghost" type="submit" formaction="/candidates/notify" formnovalidate
+                  {% if not email_configured %}disabled title="Email is not configured"{% endif %}>
+            Email selected
+          </button>
           <button class="btn" type="submit">Match selected</button>
         </div>
         {% endif %}

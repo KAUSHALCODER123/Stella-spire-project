@@ -380,3 +380,52 @@ def test_matching_with_no_candidates_selected_is_rejected(client):
 
     resp = client.post("/candidates/match", data={"role_id": cfo_id, "applicant_ids": []})
     assert resp.status_code == 400
+
+
+def test_email_action_is_disabled_without_gmail_credentials(client, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "gmail_address", "", raising=False)
+    monkeypatch.setattr(settings, "gmail_app_password", "", raising=False)
+
+    _as_admin(client)
+    body = client.get("/candidates").text
+    assert "Email notifications are off" in body
+
+
+def test_emailing_selected_applicants_sends_one_message_each(client, monkeypatch):
+    from app.config import settings
+    from app.main import APPLICANTS, ROLE_LIBRARY
+    from app import notify
+
+    monkeypatch.setattr(settings, "gmail_address", "agency@example.com", raising=False)
+    monkeypatch.setattr(settings, "gmail_app_password", "app-password", raising=False)
+    sent = []
+    monkeypatch.setattr(notify, "send_application_received",
+                         lambda **kw: sent.append(kw))
+    # main.py imported the function by name, so the patch has to land there too.
+    import app.main as main_mod
+    monkeypatch.setattr(main_mod, "send_application_received", lambda **kw: sent.append(kw))
+
+    _as_admin(client)
+    cfo_id = next(rid for rid, rc in ROLE_LIBRARY.items() if rc.role_title == "Chief Financial Officer")
+    meera_id = next(aid for aid, a in APPLICANTS.items() if a["prefs"].full_name == "Meera Ramanathan")
+
+    resp = client.post("/candidates/notify", data={
+        "role_id": cfo_id, "applicant_ids": [meera_id],
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    assert "notified=1" in resp.headers["location"]
+    assert len(sent) == 1
+    assert sent[0]["to_email"] == "meera.ramanathan.fin@example.com"
+    assert sent[0]["role_title"] == "Chief Financial Officer"
+
+
+def test_emailing_with_no_candidates_selected_is_rejected(client, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "gmail_address", "agency@example.com", raising=False)
+    monkeypatch.setattr(settings, "gmail_app_password", "app-password", raising=False)
+
+    _as_admin(client)
+    resp = client.post("/candidates/notify", data={"role_id": "", "applicant_ids": []})
+    assert resp.status_code == 400

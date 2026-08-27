@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     supabase_bucket_resumes: str = "resumes"
     supabase_bucket_jds: str = "jds"
 
+    # Candidate notifications, sent via Gmail SMTP with an app password
+    # (not the account password: https://myaccount.google.com/apppasswords).
+    # Blank disables the feature rather than failing loudly on every send.
+    gmail_address: str = ""
+    gmail_app_password: str = ""
+
     upload_dir: Path = ROOT / "data" / "uploads"
     output_dir: Path = ROOT / "data" / "out"
     sample_dir: Path = ROOT / "data" / "samples"
