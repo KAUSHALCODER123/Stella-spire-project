@@ -14,12 +14,18 @@ whole design:
 
 Steps 3, 4 and 7 are the reason a recruiter can trust the output. The model
 never gets a chance to be wrong about a date.
+
+Steps 2 and 5 read different documents and neither needs the other's
+output, so on a single-CV run they fire concurrently -- assessment (6) is
+the first step that actually needs both, and it still waits for them in
+order below.
 """
 
 from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional
@@ -212,23 +218,33 @@ def build_dossier(
     if not document.text.strip():
         raise ValueError("No readable text in {}. If this is a scanned PDF, it needs OCR first.".format(Path(cv_path).name))
 
-    # 2. extract facts
+    # 2. extract facts, and 5. the client brief -- run together when both are
+    # needed. They read different documents and neither depends on the
+    # other's output, so waiting for one before starting the other was pure
+    # latency: on a single-CV run this halves the time spent waiting on a
+    # model before assessment can even begin.
     stage("extracting")
     log.info("extracting profile (%d chars)", document.char_count)
-    profile = llm.extract_profile(
-        document.text, usage=usage, model=settings.extraction_model or model)
+    extraction_model = settings.extraction_model or model
+    if brief is None:
+        stage("brief")
+        log.info("parsing client brief")
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            profile_future = pool.submit(
+                llm.extract_profile, document.text, usage=usage, model=extraction_model)
+            brief_future = pool.submit(
+                llm.extract_job_brief, jd_text, usage=usage, model=model)
+            profile = profile_future.result()
+            brief = brief_future.result()
+    else:
+        profile = llm.extract_profile(document.text, usage=usage, model=extraction_model)
+
     if not profile.positions:
         warnings.append("No work history could be extracted. The dossier below will be thin.")
 
     # 3 + 4. arithmetic
     timeline = build_timeline(profile)
     computed_flags = derive_risk_flags(profile, timeline, document.text)
-
-    # 5. client brief -- reused when a batch already parsed it
-    if brief is None:
-        stage("brief")
-        log.info("parsing client brief")
-        brief = llm.extract_job_brief(jd_text, usage=usage, model=model)
 
     # 6. assessment
     stage("assessing")
