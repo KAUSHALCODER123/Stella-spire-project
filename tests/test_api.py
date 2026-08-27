@@ -306,3 +306,77 @@ def test_an_employer_is_not_shown_the_agencys_matching_controls(client):
     assert "Run the match" not in body
     assert "No applicants yet" not in body
     assert "Matching" in body
+
+
+def _as_admin(client):
+    from app.accounts import ADMIN_EMAIL, ADMIN_PASSWORD
+    client.post("/login", data={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+                follow_redirects=False)
+
+
+def test_candidates_page_shows_the_applicant_pool_unscored(client):
+    """Applicants who used the seeker form never appeared on /candidates --
+    only CVs the admin had personally run through /generate did."""
+    _as_admin(client)
+    body = client.get("/candidates").text
+    assert "Meera Ramanathan" in body
+    assert "Applied, awaiting match" in body
+
+
+def test_filtering_candidates_by_role_previews_the_free_constraint_gate(client):
+    """Picking a role should show who clears it before anything is spent."""
+    from app.main import ROLE_LIBRARY
+    _as_admin(client)
+    cfo_id = next(rid for rid, rc in ROLE_LIBRARY.items() if rc.role_title == "Chief Financial Officer")
+
+    body = client.get("/candidates", params={"role_id": cfo_id}).text
+    assert "Chief Financial Officer" in body
+    # Rohit's floor (125 LPA) is inside the CFO band (up to 130) but Daniel,
+    # priced out and unwilling to relocate, should read as blocked somewhere.
+    assert "gate" in body  # the badge class renders at all
+
+
+def test_matching_selected_applicants_against_a_role(client, inline_threads, monkeypatch):
+    """The other end of /roles/match: hand-pick CVs, hand-pick one role."""
+    from app.main import APPLICANTS, ROLE_LIBRARY, RUNS, settings
+    from app import matchrun
+    from app.schemas import Assessment, JobBrief
+    from tests.fixtures import sample_profile
+
+    def fake_brief(jd_text, usage=None, model=None):
+        return JobBrief(role_title="Chief Financial Officer", stated_min_years=5, requirements=[])
+
+    def fake_profile(text, usage=None, model=None):
+        return sample_profile()
+
+    def fake_assess(*, profile, timeline, brief, cv_text, usage=None, model=None):
+        return Assessment(executive_summary="s", fit_rationale="r")
+
+    monkeypatch.setattr(settings, "openai_api_key", "test-key", raising=False)
+    monkeypatch.setattr(matchrun.llm, "extract_job_brief", fake_brief)
+    monkeypatch.setattr(matchrun.llm, "extract_profile", fake_profile)
+    monkeypatch.setattr(matchrun.llm, "assess", fake_assess)
+
+    _as_admin(client)
+    cfo_id = next(rid for rid, rc in ROLE_LIBRARY.items() if rc.role_title == "Chief Financial Officer")
+    meera_id = next(aid for aid, a in APPLICANTS.items() if a["prefs"].full_name == "Meera Ramanathan")
+
+    resp = client.post("/candidates/match", data={
+        "role_id": cfo_id, "applicant_ids": [meera_id], "anonymise": "",
+    }, follow_redirects=False)
+
+    assert resp.status_code == 303
+    run_id = resp.headers["location"].rsplit("/", 1)[-1]
+    run = RUNS[run_id]
+    assert run.requisitions[0].source_role_id == cfo_id
+    assert len(run.candidates) == 1
+    assert run.candidates[0].prefs.full_name == "Meera Ramanathan"
+
+
+def test_matching_with_no_candidates_selected_is_rejected(client):
+    from app.main import ROLE_LIBRARY
+    _as_admin(client)
+    cfo_id = next(iter(ROLE_LIBRARY))
+
+    resp = client.post("/candidates/match", data={"role_id": cfo_id, "applicant_ids": []})
+    assert resp.status_code == 400

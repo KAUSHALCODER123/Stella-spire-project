@@ -50,6 +50,7 @@ from app.intake import (
     CandidatePreferences,
     RoleConstraints,
     brief_from_constraints,
+    check_constraints,
     role_text,
 )
 from app.matchrun import RUNS, create_run, execute as execute_run
@@ -494,7 +495,7 @@ def workspace(request: Request):
 
 
 @app.get("/candidates", response_class=HTMLResponse)
-def candidates(request: Request):
+def candidates(request: Request, role_id: Optional[str] = None):
     company, redirect = require_admin(request)
     if redirect is not None:
         return redirect
@@ -511,13 +512,87 @@ def candidates(request: Request):
             "meta": "{} of {} requirements".format(len(d.matched_requirements), len(d.assessment.requirement_matches)),
             "pill": "{}%".format(pct), "pill_tone": _tone(pct), "square": False,
         })
+
+    # Everyone who has applied through the seeker form, not yet scored
+    # against anything. Filtering by a role previews the free constraint
+    # gate so the admin only spends a model call on candidates worth it.
+    selected_role = ROLE_LIBRARY.get(role_id) if role_id else None
+    applicants = []
+    for aid, a in list(APPLICANTS.items())[::-1]:
+        prefs = a["prefs"]
+        gate = check_constraints(prefs, selected_role) if selected_role else None
+        applicants.append({
+            "id": aid,
+            "name": prefs.full_name or a["filename"],
+            "initials": _initials(prefs.full_name, "CV"),
+            "years": prefs.years_experience,
+            "location": prefs.current_location,
+            "notice": prefs.notice_period_days,
+            "expected_ctc": prefs.expected_ctc_lpa,
+            "gate": gate,
+        })
+    if selected_role is not None:
+        applicants.sort(key=lambda row: bool(row["gate"] and row["gate"].blocked))
+
     ctx = chrome("candidates", request)
     ctx.update({
         "heading": "Candidates", "rows": rows,
         "empty_title": "No resumes analysed yet",
         "empty_detail": "Upload a resume and a job description to build your first match report.",
+        "applicants": applicants,
+        "roles": list(ROLE_LIBRARY.items()),
+        "selected_role_id": role_id or "",
+        "selected_role_title": selected_role.role_title if selected_role else "",
+        "model_choices": available_models(),
     })
-    return templates.TemplateResponse(request, "list.html", ctx)
+    return templates.TemplateResponse(request, "candidates.html", ctx)
+
+
+@app.post("/candidates/match")
+def match_selected_applicants(
+    request: Request,
+    role_id: str = Form(...),
+    applicant_ids: List[str] = Form(default=[]),
+    model: Optional[str] = Form(None),
+    anonymise: Optional[str] = Form(None),
+):
+    """Match a hand-picked set of applicants against one posted role.
+
+    The bulk /roles/match runs everyone against everything; this is the
+    other end of the same pipeline, for when the admin already knows which
+    CVs and which role belong together.
+    """
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
+    rc = ROLE_LIBRARY.get(role_id)
+    if rc is None:
+        return _error(request, "That role no longer exists.",
+                      "Pick a role from the list and try again.")
+    chosen_ids = [aid for aid in applicant_ids if aid in APPLICANTS]
+    if not chosen_ids:
+        return _error(request, "No candidates selected.",
+                      "Select at least one applicant to match against a role.")
+    if not _has_key():
+        return _error(request, "No API key configured.",
+                      "Add your OPENAI_API_KEY to .env and restart the server.")
+
+    chosen_model = model if model in {m[0] for m in available_models()} else settings.model
+    run = create_run(
+        jds=[(rc.role_title, role_text(rc))],
+        cvs=[(APPLICANTS[aid]["filename"], APPLICANTS[aid]["path"]) for aid in chosen_ids],
+        model=chosen_model,
+        anonymise=bool(anonymise),
+        extraction_model=settings.extraction_model or chosen_model,
+    )
+    run.requisitions[0].constraints = rc
+    run.requisitions[0].brief = brief_from_constraints(rc)
+    run.requisitions[0].source_role_id = role_id
+    for cand, aid in zip(run.candidates, chosen_ids):
+        cand.prefs = APPLICANTS[aid]["prefs"]
+
+    run_in_background(execute_run, run.id, STORE)
+    return RedirectResponse("/match/{}".format(run.id), status_code=303)
 
 
 @app.get("/shortlists", response_class=HTMLResponse)

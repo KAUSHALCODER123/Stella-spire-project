@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}Candidates — SpireDossier{% endblock %}
+{% block head %}
+<style>
+  .lrow {
+    display: flex; align-items: center; gap: 14px; padding: 15px 20px;
+    border-bottom: 1px solid var(--border-2); text-decoration: none; color: inherit;
+    transition: background var(--fast) var(--ease);
+  }
+  .lrow:last-child { border-bottom: none; }
+  .lrow:hover { background: var(--surface-2); }
+  .lrow .av {
+    width: 38px; height: 38px; border-radius: 50%; flex: none; display: grid; place-items: center;
+    background: var(--accent-50); color: var(--accent); font-size: 12.5px; font-weight: 700;
+  }
+  .lrow .n { flex: 1; min-width: 0; }
+  .lrow .n b { display: block; font-size: 14.5px; font-weight: 600; }
+  .lrow .n span { font-size: 12.5px; color: var(--ink-4); }
+  .lrow .m { text-align: right; font-size: 12.5px; color: var(--ink-4); }
+  .empty { padding: 56px 20px; text-align: center; }
+  .empty .t { font-size: 15px; font-weight: 600; }
+  .empty .d { font-size: 13.5px; color: var(--ink-4); margin: 6px 0 18px; }
+
+  .arow2 { display: flex; align-items: center; gap: 12px; padding: 13px 20px; border-bottom: 1px solid var(--border-2); }
+  .arow2:last-child { border-bottom: none; }
+  .arow2 input[type="checkbox"] { width: 16px; height: 16px; flex: none; }
+  .arow2 .av { width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid; place-items: center;
+              background: var(--accent-50); color: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .arow2 .n { flex: 1; min-width: 0; }
+  .arow2 .n b { display: block; font-size: 13.5px; font-weight: 600; }
+  .arow2 .n span { font-size: 11.5px; color: var(--ink-4); }
+  .arow2.blocked { opacity: .55; }
+  .gate { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+  .gate.ok { color: var(--ok); background: var(--ok-50); }
+  .gate.warn { color: var(--warn); background: var(--warn-50); }
+  .gate.bad { color: var(--bad); background: var(--bad-50); }
+  .filterbar { display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border-2); }
+  .filterbar select { flex: 1; }
+  .matchbar { padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .matchbar .hint { margin: 0; }
+</style>
+{% endblock %}
+{% block chrome %}
+<div class="topbar">
+  <div>
+    <div class="crumb">Workspace</div>
+    <h1>Candidates</h1>
+    <div class="hint" style="margin-top:2px;">{{ rows|length }} scored · {{ applicants|length }} applied</div>
+  </div>
+  <div class="acts"><a class="btn" href="/">New analysis</a></div>
+</div>
+{% endblock %}
+{% block content %}
+<div class="page">
+
+  <div class="card reveal" style="margin-bottom:18px;">
+    <div class="card-head"><h2>Scored reports</h2><span class="hint">{{ rows | length }} total</span></div>
+    <div>
+      {% for r in rows %}
+      <a class="lrow" href="{{ r.href }}">
+        <span class="av">{{ r.badge }}</span>
+        <span class="n"><b>{{ r.title }}</b><span>{{ r.subtitle }}</span></span>
+        <span class="m">{{ r.meta }}</span>
+        {% if r.pill %}<span class="pill {{ r.pill_tone }}">{{ r.pill }}</span>{% endif %}
+      </a>
+      {% else %}
+      <div class="empty">
+        <div class="t">{{ empty_title }}</div>
+        <div class="d">{{ empty_detail }}</div>
+        <a class="btn" href="/">Upload a CV</a>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card reveal">
+    <div class="card-head">
+      <h2>Applied, awaiting match</h2>
+      <span class="hint">{{ applicants|length }} in the pool</span>
+    </div>
+
+    <form method="get" action="/candidates" class="filterbar">
+      <select name="role_id" onchange="this.form.submit()">
+        <option value="">Filter by role — everyone shown as unscreened</option>
+        {% for rid, r in roles %}
+        <option value="{{ rid }}" {% if rid == selected_role_id %}selected{% endif %}>{{ r.role_title }}</option>
+        {% endfor %}
+      </select>
+    </form>
+
+    <form method="post" action="/candidates/match">
+      <input type="hidden" name="role_id" value="{{ selected_role_id }}">
+      <div>
+        {% for a in applicants %}
+        <div class="arow2 {{ 'blocked' if a.gate and a.gate.blocked }}">
+          <input type="checkbox" name="applicant_ids" value="{{ a.id }}" {% if not selected_role_id %}disabled{% endif %}>
+          <span class="av">{{ a.initials }}</span>
+          <span class="n">
+            <b>{{ a.name }}</b>
+            <span>
+              {% if a.years %}{{ a.years }}y{% endif %}
+              {% if a.location %} · {{ a.location }}{% endif %}
+              {% if a.notice %} · {{ a.notice }}d notice{% endif %}
+              {% if a.expected_ctc %} · {{ a.expected_ctc }} LPA{% endif %}
+            </span>
+          </span>
+          {% if a.gate %}
+            <span class="gate {{ 'bad' if a.gate.blocked else ('warn' if a.gate.warnings else 'ok') }}">
+              {{ a.gate.summary }}
+            </span>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="empty" style="padding:36px 20px;">
+          <div class="t">No applicants yet</div>
+          <div class="d">Share the application link and CVs will collect here.</div>
+        </div>
+        {% endfor %}
+      </div>
+
+      {% if applicants %}
+      <div class="matchbar">
+        {% if not selected_role_id %}
+        <p class="hint">Pick a role above to preview who clears it for free, then select candidates to match.</p>
+        {% else %}
+        <p class="hint">Selected candidates run against <b>{{ selected_role_title }}</b>.
+           Blocked candidates are dimmed but can still be selected.</p>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <select name="model">
+            {% for value, label, note in (model_choices or []) %}
+              <option value="{{ value }}">{{ label }}</option>
+            {% endfor %}
+          </select>
+          <label class="check"><input type="checkbox" name="anonymise" checked><span class="t">Blind</span></label>
+          <button class="btn" type="submit">Match selected</button>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </form>
+  </div>
+
+  <p class="hint" style="margin-top:14px;">Held in memory for this session. Restarting the server clears them.</p>
+</div>
+{% endblock %}
