@@ -39,10 +39,10 @@
 <div class="topbar">
   <div>
     <div class="crumb">Workspace</div>
-    <h1>Open roles</h1>
+    <h1>{{ 'Open roles' if is_admin else 'My roles' }}</h1>
     <div class="hint" style="margin-top:2px;">
-      {{ roles|length }} role{{ '' if roles|length == 1 else 's' }} ·
-      {{ applicants|length }} applicant{{ '' if applicants|length == 1 else 's' }}
+      {{ roles|length }} role{{ '' if roles|length == 1 else 's' }}
+      {%- if is_admin %} · {{ applicants|length }} applicant{{ '' if applicants|length == 1 else 's' }}{% endif %}
     </div>
   </div>
   <div class="acts">
@@ -100,6 +100,7 @@
     </div>
 
     <div class="grid" style="gap:18px;">
+      {% if is_admin %}
       <div class="card reveal">
         <div class="card-head"><h2>Applicants</h2><span class="hint">{{ applicants|length }}</span></div>
         <div>
@@ -124,6 +125,7 @@
           {% endfor %}
         </div>
       </div>
+      {% endif %}
 
       <div class="card reveal">
         <div class="card-head"><h2>Application link</h2></div>
@@ -137,6 +139,7 @@
         </div>
       </div>
 
+      {% if is_admin %}
       <div class="card reveal">
         <div class="card-head"><h2>Run the match</h2></div>
         <div class="card-body">
@@ -164,6 +167,17 @@
           </form>
         </div>
       </div>
+      {% else %}
+      <div class="card reveal">
+        <div class="card-head"><h2>Matching</h2></div>
+        <div class="card-body">
+          <p class="hint" style="margin:0;">
+            {{ agency }} runs the match across everyone who has applied and sends you the ranked
+            shortlist for your own roles — you'll see it on your dashboard as soon as it's ready.
+          </p>
+        </div>
+      </div>
+      {% endif %}
     </div>
 
   </div>

@@ -288,3 +288,21 @@ def test_the_demo_match_populates_each_employers_own_shortlist(client):
     assert "Head of Financial Planning & Analysis" in alderline
     # Meridian's opening must not appear on Alderline's dashboard.
     assert "Chief Financial Officer" not in alderline
+
+
+def test_an_employer_is_not_shown_the_agencys_matching_controls(client):
+    """/roles is shared between the agency and its clients.
+
+    An employer can never see other clients' applicants, so the admin-only
+    "Applicants" list and "Run the match" button must not render for them --
+    otherwise they see a permanently-broken "Match 0 x N" control and a false
+    "No applicants yet" message even when people have applied.
+    """
+    client.post("/login", data={"email": "careers@alderline.example", "password": "admin123"},
+                follow_redirects=False)
+    body = client.get("/roles").text
+
+    assert "My roles" in body
+    assert "Run the match" not in body
+    assert "No applicants yet" not in body
+    assert "Matching" in body
