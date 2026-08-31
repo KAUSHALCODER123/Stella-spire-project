@@ -56,6 +56,13 @@
   .cell.screened { background: var(--surface-2); color: var(--ink-4); border-style: dashed; border-color: var(--border); font-weight: 600; }
   .cell.none { color: var(--ink-4); opacity: .45; font-weight: 400; font-size: 12px; padding: 12px 6px; }
   .cell.err { background: var(--bad-50); color: var(--bad); font-size: 11px; font-weight: 600; }
+  .cell.review { padding: 8px; text-align: left; font-weight: 600; }
+  .cell.review.blocked { background: var(--bad-50); color: var(--bad); border-color: #F6D4D3; }
+  .cell.review.screened { background: var(--surface-2); color: var(--ink-3); }
+  .cell .why { display: block; font-size: 10.5px; line-height: 1.35; margin: 4px 0 7px; font-weight: 500; }
+  .override { border: 1px solid currentColor; background: transparent; color: inherit; border-radius: 6px;
+              padding: 4px 7px; font: 600 10.5px var(--font); cursor: pointer; }
+  .override:hover { background: rgba(255,255,255,.65); }
 
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-3); margin-top: 14px; }
   .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
@@ -80,6 +87,13 @@
   .failrow { padding: 11px 20px; border-bottom: 1px solid var(--border-2); font-size: 13.5px; }
   .failrow:last-child { border-bottom: none; }
   .failrow span { color: var(--bad); }
+  .screen-queues { padding: 0 20px 12px; }
+  .screen-queues details { border-top: 1px solid var(--border-2); padding: 10px 0 0; margin-top: 10px; }
+  .screen-queues summary { cursor: pointer; color: var(--ink-3); font-size: 12.5px; font-weight: 600; }
+  .qrow { display: grid; grid-template-columns:minmax(150px,.7fr) 1fr auto; align-items:center; gap:12px;
+          padding:10px 0; border-bottom:1px solid var(--border-2); font-size:12.5px; }
+  .qrow:last-child { border-bottom:0; }
+  .qrow .reason { color:var(--ink-3); line-height:1.4; }
 
   @media (max-width: 900px) {
     .matrix thead th.corner, .matrix tbody th { min-width: 150px; }
@@ -216,9 +230,21 @@
                   </a>
                 {% elif pair and pair.status == 'failed' %}
                   <span class="cell err" title="{{ pair.error }}">failed</span>
+                {% elif pair and pair.status in ('queued', 'running') %}
+                  <span class="cell screened">Assessing…<small>RECRUITER OVERRIDE</small></span>
+                {% elif pair and pair.status == 'blocked' %}
+                  <span class="cell review blocked">
+                    HARD REJECT<span class="why">{{ pair.reason }}</span>
+                    <form method="post" action="/match/{{ run.id }}/pairs/{{ cand.index }}/{{ req.index }}/assess">
+                      <button class="override" type="submit">Assess anyway</button>
+                    </form>
+                  </span>
                 {% elif pair %}
-                  <span class="cell screened" title="{{ pair.reason }}">
-                    {{ pair.affinity.percent }}%<small>SCREENED</small>
+                  <span class="cell review screened">
+                    SCREENED OUT<span class="why">{{ pair.reason }}</span>
+                    <form method="post" action="/match/{{ run.id }}/pairs/{{ cand.index }}/{{ req.index }}/assess">
+                      <button class="override" type="submit">Assess anyway</button>
+                    </form>
                   </span>
                 {% else %}
                   <span class="cell none">—</span>
@@ -241,6 +267,8 @@
   <!-- ---------- per-role shortlists ---------- -->
   {% for req in run.requisitions %}
   {% set rows = run.shortlist_for(req.index) %}
+  {% set screened = run.pairs | selectattr('requisition_index', 'equalto', req.index) | selectattr('status', 'equalto', 'skipped') | list %}
+  {% set blocked = run.pairs | selectattr('requisition_index', 'equalto', req.index) | selectattr('status', 'equalto', 'blocked') | list %}
   <div class="card reveal role">
     <div class="card-head">
       <h2>{{ req.title }}</h2>
@@ -269,6 +297,38 @@
         {% endif %}
         {% endfor %}
       </div>
+    {% endif %}
+    {% if screened or blocked %}
+    <div class="screen-queues">
+      {% if screened %}
+      <details>
+        <summary>Affinity-screened out · {{ screened|length }}</summary>
+        {% for pair in screened %}
+        {% set cand = run.candidates[pair.candidate_index] %}
+        <div class="qrow">
+          <b>{{ cand.name }}</b><span class="reason">{{ pair.reason }}</span>
+          <form method="post" action="/match/{{ run.id }}/pairs/{{ cand.index }}/{{ req.index }}/assess">
+            <button class="btn sm ghost" type="submit">Assess anyway</button>
+          </form>
+        </div>
+        {% endfor %}
+      </details>
+      {% endif %}
+      {% if blocked %}
+      <details>
+        <summary>Hard-constraint rejected · {{ blocked|length }}</summary>
+        {% for pair in blocked %}
+        {% set cand = run.candidates[pair.candidate_index] %}
+        <div class="qrow">
+          <b>{{ cand.name }}</b><span class="reason">{{ pair.reason }}</span>
+          <form method="post" action="/match/{{ run.id }}/pairs/{{ cand.index }}/{{ req.index }}/assess">
+            <button class="btn sm ghost" type="submit">Assess anyway</button>
+          </form>
+        </div>
+        {% endfor %}
+      </details>
+      {% endif %}
+    </div>
     {% endif %}
   </div>
   {% endfor %}
@@ -322,8 +382,22 @@
 <script>
 (function () {
   var running = {{ 'true' if run.running else 'false' }};
+  var pendingOverrides = {{ run.pairs | selectattr('status', 'in', ['queued', 'running']) | list | length }};
   var id = "{{ run.id }}";
   var ORDER = ["briefs", "extracting", "screening", "assessing"];
+
+  if (!running && pendingOverrides) {
+    (function waitForOverride() {
+      fetch("/match/" + id + "/status")
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          if (d.pending_overrides) setTimeout(waitForOverride, 1200);
+          else window.location.reload();
+        })
+        .catch(function () { setTimeout(waitForOverride, 2500); });
+    })();
+    return;
+  }
   if (!running) return;
 
   function paint(d) {

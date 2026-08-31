@@ -26,6 +26,10 @@ _PHONE_RE = re.compile(r"(?:\+?\d[\d\s().-]{7,}\d)")
 _URL_RE = re.compile(r"\b(?:https?://)?(?:www\.)?(?:linkedin\.com|github\.com)/[\w\-/.]+", re.I)
 
 
+class BlindExportError(RuntimeError):
+    """A supposedly blind deliverable still contains candidate identity."""
+
+
 def _name_variants(full_name: Optional[str]) -> List[str]:
     if not full_name:
         return []
@@ -41,6 +45,46 @@ def _name_variants(full_name: Optional[str]) -> List[str]:
 
     # Longest first, so "Arjun Menon" is replaced before "Arjun" can split it.
     return sorted(variants, key=len, reverse=True)
+
+
+def identity_leaks(text: str, profile) -> List[str]:
+    """Return identity field labels still visible in a rendered deliverable.
+
+    Values are deliberately not returned: an error or log message about a
+    privacy failure must not repeat the personal data it just caught.
+    """
+    text = text or ""
+    folded = text.casefold()
+    leaks = set()
+
+    for variant in _name_variants(getattr(profile, "full_name", None)):
+        if re.search(r"\b" + re.escape(variant.casefold()) + r"\b", folded):
+            leaks.add("candidate name")
+
+    for label, value in (
+        ("email address", getattr(profile, "email", None)),
+        ("profile link", getattr(profile, "linkedin", None)),
+    ):
+        value = (value or "").strip()
+        if value and value.casefold() in folded:
+            leaks.add(label)
+
+    phone_digits = re.sub(r"\D", "", getattr(profile, "phone", None) or "")
+    rendered_digits = re.sub(r"\D", "", text)
+    if len(phone_digits) >= 8 and phone_digits in rendered_digits:
+        leaks.add("phone number")
+
+    return sorted(leaks)
+
+
+def assert_no_identity_leaks(text: str, profile) -> None:
+    """Fail closed when blind output contains any known identifier."""
+    leaks = identity_leaks(text, profile)
+    if leaks:
+        raise BlindExportError(
+            "The blind export was stopped because its final privacy check found: {}. "
+            "No client file was served.".format(", ".join(leaks))
+        )
 
 
 def redact_text(

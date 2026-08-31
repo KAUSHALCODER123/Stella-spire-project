@@ -256,6 +256,49 @@ def create_run(
     return run
 
 
+def assess_pair(run: MatchRun, pair: Pair, store: Dict[str, Dossier]) -> None:
+    """Build one full dossier, including recruiter-requested overrides.
+
+    Kept outside the initial run so a screened or constraint-blocked pair can
+    later be assessed without reparsing every CV and role in the matrix.
+    """
+    cand = run.candidates[pair.candidate_index]
+    req = run.requisitions[pair.requisition_index]
+    pair.status = "running"
+    try:
+        assessment = llm.assess(
+            profile=cand.profile, timeline=cand.timeline, brief=req.brief,
+            cv_text=cand.document.text, usage=run.usage, model=run.model,
+        )
+        verification = verify_assessment(assessment, cand.document.text, req.jd_text)
+
+        for match in assessment.requirement_matches:
+            if match.verdict == "strong" and not match.evidence:
+                match.verdict = "unclear"
+                match.note = (match.note + " " if match.note else "") + \
+                    "[Demoted: no supporting quote was produced.]"
+
+        dossier = Dossier(
+            profile=cand.profile, timeline=cand.timeline, brief=req.brief,
+            assessment=assessment,
+            flags=sort_flags(cand.computed_flags + assessment.risk_flags),
+            document=cand.document, usage=llm.Usage(), brief_text=req.jd_text,
+            verification=verification, model=run.model, warnings=list(cand.warnings),
+        )
+        dossier.anonymise = run.anonymise  # type: ignore[attr-defined]
+        dossier_id = uuid.uuid4().hex[:12]
+        store[dossier_id] = dossier
+        from app import db as _db
+        _db.save_dossier(dossier_id, dossier)
+        pair.dossier, pair.dossier_id, pair.status = dossier, dossier_id, "done"
+    except Exception as exc:  # noqa: BLE001 - one pair must not stop the run
+        log.error("run %s: pair c%d/r%d failed: %s", run.id, pair.candidate_index,
+                  pair.requisition_index, exc)
+        pair.error, pair.status = str(exc), "failed"
+        if getattr(exc, "kind", "") in ("quota", "auth"):
+            run.error, run.error_kind = str(exc), exc.kind  # type: ignore[attr-defined]
+
+
 def execute(run_id: str, store: Dict[str, Dossier]) -> None:
     """Run a match. Intended for a background thread."""
     run = RUNS.get(run_id)
@@ -371,49 +414,12 @@ def _execute(run: MatchRun, store: Dict[str, Dossier]) -> None:
     # --- 4. assess the selected pairs -------------------------------------
     run.phase = "assessing"
 
-    def assess(pair: Pair) -> None:
-        cand = run.candidates[pair.candidate_index]
-        req = run.requisitions[pair.requisition_index]
-        pair.status = "running"
-        try:
-            assessment = llm.assess(
-                profile=cand.profile, timeline=cand.timeline, brief=req.brief,
-                cv_text=cand.document.text, usage=run.usage, model=run.model,
-            )
-            verification = verify_assessment(assessment, cand.document.text, req.jd_text)
-
-            for match in assessment.requirement_matches:
-                if match.verdict == "strong" and not match.evidence:
-                    match.verdict = "unclear"
-                    match.note = (match.note + " " if match.note else "") + \
-                        "[Demoted: no supporting quote was produced.]"
-
-            dossier = Dossier(
-                profile=cand.profile, timeline=cand.timeline, brief=req.brief,
-                assessment=assessment,
-                flags=sort_flags(cand.computed_flags + assessment.risk_flags),
-                document=cand.document, usage=llm.Usage(), brief_text=req.jd_text,
-                verification=verification, model=run.model, warnings=list(cand.warnings),
-            )
-            dossier.anonymise = run.anonymise  # type: ignore[attr-defined]
-            dossier_id = uuid.uuid4().hex[:12]
-            store[dossier_id] = dossier
-            from app import db as _db
-            _db.save_dossier(dossier_id, dossier)
-            pair.dossier, pair.dossier_id, pair.status = dossier, dossier_id, "done"
-        except Exception as exc:  # noqa: BLE001 - one pair must not stop the run
-            log.error("run %s: pair c%d/r%d failed: %s", run.id, pair.candidate_index,
-                      pair.requisition_index, exc)
-            pair.error, pair.status = str(exc), "failed"
-            if getattr(exc, "kind", "") in ("quota", "auth"):
-                run.error, run.error_kind = str(exc), exc.kind  # type: ignore[attr-defined]
-
     # Grouped by role: consecutive calls then share the brief prefix, which is
     # what makes prompt caching pay. Ungrouped, every call is a cache miss.
     selected = sorted(run.selected_pairs, key=lambda p: p.requisition_index)
     if selected:
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-            list(pool.map(assess, selected))
+            list(pool.map(lambda pair: assess_pair(run, pair, store), selected))
 
     log.info("run %s finished in %.1fs: %d roles, %d candidates, %d assessed",
              run.id, run.elapsed, len(run.requisitions), len(run.candidates), len(run.assessed_pairs))
@@ -440,4 +446,10 @@ def status_payload(run: MatchRun) -> dict:
         ],
         "assessed": len(run.assessed_pairs),
         "selected": len(run.selected_pairs),
+        "pending_overrides": sum(1 for p in run.pairs if p.status in ("queued", "running")),
+        "pairs": [
+            {"candidate_index": p.candidate_index, "requisition_index": p.requisition_index,
+             "status": p.status, "dossier_id": p.dossier_id, "error": p.error}
+            for p in run.pairs
+        ],
     }

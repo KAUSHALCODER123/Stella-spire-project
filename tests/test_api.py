@@ -82,6 +82,10 @@ def test_blind_and_named_views(client, demo_id):
     named = client.get("/dossier/{}?blind=0".format(demo_id), headers=HTML).text.lower()
     assert "meera" not in blind and "ramanathan" not in blind
     assert "meera" in named
+    assert "blind client view" in blind and "client-safe" in blind
+    assert "named · internal view" in named and "do not share" in named
+    assert "download blind client pdf" in blind
+    assert "review named export" in named
 
 
 def test_embed_renders_the_document(client, demo_id):
@@ -95,6 +99,21 @@ def test_pdf_downloads(client, demo_id):
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/pdf"
     assert r.content[:5] == b"%PDF-"
+    assert "BLIND.pdf" in r.headers["content-disposition"]
+
+
+def test_named_pdf_requires_a_separate_confirmation(client, demo_id):
+    warning = client.get("/dossier/{}/pdf?blind=0".format(demo_id), headers=HTML)
+    assert warning.status_code == 200
+    assert "text/html" in warning.headers["content-type"]
+    assert "This is not a blind client dossier" in warning.text
+    assert "Download named internal PDF" in warning.text
+
+    download = client.get("/dossier/{}/pdf?blind=0&confirm_named=1".format(demo_id))
+    assert download.status_code == 200
+    assert download.headers["content-type"] == "application/pdf"
+    assert download.content[:5] == b"%PDF-"
+    assert "NAMED%20INTERNAL.pdf" in download.headers["content-disposition"]
 
 
 # --- not found -------------------------------------------------------------
@@ -195,6 +214,55 @@ def test_candidates_page_lists_the_demo_report(client, demo_id):
     assert "/dossier/{}".format(demo_id) in client.get("/candidates", headers=HTML).text
 
 
+def test_batch_page_is_an_actionable_triage_queue(client):
+    import time
+    from pathlib import Path
+    from app.batch import BATCHES, Batch, BatchItem
+    from tests.fixtures import sample_dossier
+
+    row = BatchItem(filename="meera.pdf", path=Path("meera.pdf"), index=0,
+                    status="done", stage="done", dossier_id="triage-dossier",
+                    dossier=sample_dossier())
+    batch = Batch(id="triage-test", jd_text="", model="gpt-4o", anonymise=True,
+                  items=[row], finished_at=time.time())
+    BATCHES[batch.id] = batch
+    try:
+        body = client.get("/batch/{}".format(batch.id), headers=HTML).text
+        for expected in ("Search candidate", "All decisions", "Any coverage",
+                         "Recommended rank", "Shortlist", "Maybe", "Reject"):
+            assert expected in body
+
+        response = client.post("/batch/{}/decision".format(batch.id), data={
+            "item_index": 0, "decision": "shortlist",
+        }, follow_redirects=False)
+        assert response.status_code == 303
+        assert row.decision == "shortlist"
+        assert 'data-decision="shortlist"' in client.get("/batch/{}".format(batch.id)).text
+    finally:
+        BATCHES.pop(batch.id, None)
+
+
+def test_batch_rejects_an_unknown_decision(client):
+    import time
+    from pathlib import Path
+    from app.batch import BATCHES, Batch, BatchItem
+    from tests.fixtures import sample_dossier
+
+    row = BatchItem(filename="meera.pdf", path=Path("meera.pdf"), index=0,
+                    status="done", stage="done", dossier=sample_dossier())
+    batch = Batch(id="bad-decision-test", jd_text="", model="gpt-4o", anonymise=True,
+                  items=[row], finished_at=time.time())
+    BATCHES[batch.id] = batch
+    try:
+        response = client.post("/batch/{}/decision".format(batch.id), data={
+            "item_index": 0, "decision": "hire-immediately",
+        })
+        assert response.status_code == 400
+        assert row.decision == "unreviewed"
+    finally:
+        BATCHES.pop(batch.id, None)
+
+
 # --- the demo's opening screen --------------------------------------------
 
 
@@ -244,6 +312,34 @@ def test_the_demo_match_exercises_the_real_constraint_gate(client):
     for pair in run.blocked_pairs:
         assert pair.check is not None and pair.check.blocked
         assert any(ch.isdigit() for ch in pair.reason), pair.reason
+
+
+def test_match_matrix_exposes_rejection_reasons_and_override_actions(client, monkeypatch):
+    from app.main import RUNS
+    import app.main as main_mod
+
+    response = client.post("/match/demo", follow_redirects=False)
+    run_id = response.headers["location"].rsplit("/", 1)[-1]
+    run = RUNS[run_id]
+    body = client.get("/match/{}".format(run_id), headers=HTML).text
+
+    assert "HARD REJECT" in body
+    assert "SCREENED OUT" in body
+    assert "Hard-constraint rejected" in body
+    assert "Affinity-screened out" in body
+    assert "Assess anyway" in body
+    assert any(pair.reason in body for pair in run.blocked_pairs)
+
+    blocked = run.blocked_pairs[0]
+    monkeypatch.setattr(main_mod, "run_in_background", lambda *args: None)
+    override = client.post(
+        "/match/{}/pairs/{}/{}/assess".format(
+            run_id, blocked.candidate_index, blocked.requisition_index),
+        follow_redirects=False,
+    )
+    assert override.status_code == 303
+    assert blocked.selected and blocked.status == "queued"
+    assert "Recruiter override" in blocked.reason
 
 
 def test_the_demo_match_is_in_the_finance_vertical(client):

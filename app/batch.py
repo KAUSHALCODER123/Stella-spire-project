@@ -48,6 +48,9 @@ class BatchItem:
     dossier: Optional[Dossier] = None
     error: Optional[str] = None
     elapsed: float = 0.0
+    # Recruiter disposition belongs to the shortlist, not to the generated
+    # dossier. It starts neutral and survives filtering/reordering in this run.
+    decision: str = "unreviewed"     # unreviewed | shortlist | maybe | reject
 
     # --- ranking inputs, read straight off the finished dossier ----------
 
@@ -243,6 +246,7 @@ def status_payload(batch: Batch) -> dict:
                 "coverage": round(i.coverage * 100) if i.coverage >= 0 else None,
                 "strong": i.strong,
                 "high_flags": i.high_flags,
+                "decision": i.decision,
             }
             for i in batch.items
         ],

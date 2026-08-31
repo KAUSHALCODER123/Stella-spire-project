@@ -113,6 +113,14 @@ def test_status_payload_shape():
     assert payload["items"][0]["filename"] == "a.pdf"
     assert payload["items"][0]["coverage"] is not None
     assert "role_title" in payload
+    assert payload["items"][0]["decision"] == "unreviewed"
+
+
+def test_recruiter_decision_does_not_change_algorithmic_rank():
+    high = item("high.pdf", strong=7)
+    low = item("low.pdf", strong=2)
+    low.decision = "shortlist"
+    assert [i.filename for i in batch_of(low, high).ranked()] == ["high.pdf", "low.pdf"]
 
 
 def test_status_payload_survives_an_unparsed_brief():

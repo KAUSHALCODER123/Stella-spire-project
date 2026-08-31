@@ -53,7 +53,7 @@ from app.intake import (
     check_constraints,
     role_text,
 )
-from app.matchrun import RUNS, create_run, execute as execute_run
+from app.matchrun import RUNS, assess_pair, create_run, execute as execute_run
 from app.matchrun import status_payload as run_status
 from app.extract.llm import LLMError
 from app.config import MODEL_CHOICES, settings
@@ -64,7 +64,7 @@ from app.pipeline import Dossier, build_dossier
 from app.pricing import price_usage
 from app.render.dossier import COMPUTED_KINDS, _skills_by_category, candidate_ref, render_html, render_pdf
 from app.render.source import render_source
-from app.render.redact import redact_dossier, redact_text
+from app.render.redact import BlindExportError, redact_dossier, redact_text
 from app.verify import verify_assessment
 from app.notify import NotifyError, is_configured as is_email_configured, send_application_received
 
@@ -1111,7 +1111,10 @@ def match_demo(request: Request):
          RoleConstraints(role_title="Head of FP&A", client_name="Alderline NBFC",
                          location="Mumbai", work_mode="onsite", min_years=8, max_years=15,
                          ctc_min_lpa=55, ctc_max_lpa=80, max_notice_days=60),
-         [70, 79, 44, None]),
+         # Sneha clears the declared constraints but has no meaningful brief
+         # overlap, so the demo shows affinity-screening separately from a
+         # hard rejection and gives the recruiter an override for both.
+         [70, 79, None, None]),
         ("Financial Controller", "Alderline NBFC",
          RoleConstraints(role_title="Financial Controller", client_name="Alderline NBFC",
                          location="Mumbai", work_mode="hybrid", min_years=7,
@@ -1232,6 +1235,41 @@ def match_status(request: Request, run_id: str):
     return JSONResponse(run_status(run))
 
 
+@app.post("/match/{run_id}/pairs/{candidate_index}/{requisition_index}/assess")
+def match_override(
+    request: Request,
+    run_id: str,
+    candidate_index: int,
+    requisition_index: int,
+):
+    """Let a recruiter overrule the free screen and buy a full assessment."""
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
+    run = RUNS.get(run_id)
+    if run is None:
+        raise HTTPException(404, "Match run not found.")
+    pair = run.pair(candidate_index, requisition_index)
+    if pair is None:
+        return _error(request, "That candidate-role pair is unavailable.",
+                      "Refresh the matrix and try again.")
+    candidate = run.candidates[candidate_index]
+    requisition = run.requisitions[requisition_index]
+    if not candidate.ok or not requisition.ok:
+        return _error(request, "That pair cannot be assessed.",
+                      "The CV or role did not parse successfully.")
+    if pair.dossier_id:
+        return RedirectResponse("/dossier/{}".format(pair.dossier_id), status_code=303)
+    if pair.status in ("queued", "running"):
+        return RedirectResponse("/match/{}".format(run_id), status_code=303)
+
+    pair.selected = True
+    pair.status = "queued"
+    pair.reason = "Recruiter override — full assessment requested."
+    run_in_background(assess_pair, run, pair, STORE)
+    return RedirectResponse("/match/{}".format(run_id), status_code=303)
+
+
 @app.get("/batch/{batch_id}", response_class=HTMLResponse)
 def batch_view(request: Request, batch_id: str):
     company, redirect = require_admin(request)
@@ -1254,6 +1292,32 @@ def batch_status(request: Request, batch_id: str):
     if batch is None:
         raise HTTPException(404, "Batch not found.")
     return JSONResponse(status_payload(batch))
+
+
+@app.post("/batch/{batch_id}/decision")
+def batch_decision(
+    request: Request,
+    batch_id: str,
+    item_index: int = Form(...),
+    decision: str = Form(...),
+):
+    """Record a recruiter's disposition without rerunning any analysis."""
+    _, redirect = require_admin(request)
+    if redirect is not None:
+        return redirect
+    batch = BATCHES.get(batch_id)
+    if batch is None:
+        raise HTTPException(404, "Batch not found.")
+    allowed = {"unreviewed", "shortlist", "maybe", "reject"}
+    if decision not in allowed:
+        return _error(request, "Unknown shortlist decision.",
+                      "Choose unreviewed, shortlist, maybe or reject.")
+    item = next((row for row in batch.items if row.index == item_index), None)
+    if item is None or not item.dossier:
+        return _error(request, "Candidate not found in this shortlist.",
+                      "Refresh the shortlist and try again.")
+    item.decision = decision
+    return RedirectResponse("/batch/{}".format(batch_id), status_code=303)
 
 
 @app.post("/demo")
@@ -1351,20 +1415,42 @@ def embed(request: Request, dossier_id: str, blind: int = 1):
 
 
 @app.get("/dossier/{dossier_id}/pdf")
-def pdf(request: Request, dossier_id: str, blind: int = 1):
-    _, forced_blind, redirect = authorise_dossier(request, dossier_id)
+def pdf(request: Request, dossier_id: str, blind: int = 1, confirm_named: int = 0):
+    company, forced_blind, redirect = authorise_dossier(request, dossier_id)
     if redirect is not None:
         return redirect
     if forced_blind:
         blind = 1
     dossier = _get(dossier_id)
     ref = candidate_ref(dossier)
+
+    blind_filename = "{} - {} - {} - BLIND.pdf".format(
+        settings.agency_name, dossier.brief.role_title, ref)
+    named_filename = "{} - {} - {} - NAMED INTERNAL.pdf".format(
+        settings.agency_name, dossier.brief.role_title, ref)
+
+    # Named output is deliberately a two-step action. A query string can
+    # switch the recruiter's private review mode, but it cannot silently turn
+    # the next click into a client-unsafe download.
+    if not blind and not forced_blind and not confirm_named:
+        ctx = chrome("candidates", request)
+        ctx.update({
+            "dossier_id": dossier_id,
+            "candidate_name": dossier.profile.full_name or "Unnamed candidate",
+            "role_title": dossier.brief.role_title,
+            "export_filename": named_filename,
+        })
+        return templates.TemplateResponse(request, "named_export_confirm.html", ctx)
+
     out = settings.output_dir / "{}_{}.pdf".format(ref, "blind" if blind else "named")
-    render_pdf(dossier, out, anonymise=bool(blind))
+    try:
+        render_pdf(dossier, out, anonymise=bool(blind))
+    except BlindExportError as exc:
+        return _error(request, "Blind export stopped", str(exc))
     return FileResponse(
         out,
         media_type="application/pdf",
-        filename="{} - {} - {}.pdf".format(settings.agency_name, dossier.brief.role_title, ref),
+        filename=blind_filename if blind else named_filename,
     )
 
 

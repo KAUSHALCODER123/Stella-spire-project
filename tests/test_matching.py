@@ -497,6 +497,29 @@ def test_a_blocked_pair_explains_itself_with_numbers(tmp_path, stub_llm):
     assert pair.check is not None and pair.check.blocked
 
 
+def test_a_recruiter_can_assess_a_previously_blocked_pair_without_reparsing(tmp_path, stub_llm):
+    from app.intake import CandidatePreferences, RoleConstraints
+    from app.matchrun import assess_pair, create_run, execute
+
+    cvs = write_cvs(tmp_path, [("x.txt", CV_BODY)])
+    store = {}
+    run = create_run(jds=[("r.txt", "Role\nNeed controllership")], cvs=cvs,
+                     model="stub", anonymise=True)
+    run.candidates[0].prefs = CandidatePreferences(min_acceptable_ctc_lpa=90)
+    run.requisitions[0].constraints = RoleConstraints(role_title="R", ctc_max_lpa=40)
+    execute(run.id, store)
+    pair = run.blocked_pairs[0]
+    assert stub_llm["profile"] == 1 and stub_llm["brief"] == 1 and stub_llm["assess"] == 0
+
+    pair.selected = True
+    pair.status = "queued"
+    assess_pair(run, pair, store)
+
+    assert stub_llm["profile"] == 1 and stub_llm["brief"] == 1
+    assert stub_llm["assess"] == 1
+    assert pair.dossier is not None and pair.status == "done"
+
+
 def test_unblocked_pairs_are_unaffected_by_the_gate(tmp_path, stub_llm):
     from app.intake import CandidatePreferences, RoleConstraints
     from app.matchrun import create_run, execute

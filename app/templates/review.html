@@ -102,6 +102,15 @@
   .trustbar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .trustbar .b { flex: 1; min-width: 130px; }
 
+  .privacy-state {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px 16px; border-radius: var(--r-sm); margin-bottom: 16px;
+    border: 1px solid #CCEBE0; background: var(--ok-50); color: #0B6B4C;
+  }
+  .privacy-state.named { border-color: #F0B9B7; background: var(--bad-50); color: #8F2928; }
+  .privacy-state b { display: block; font-size: 13.5px; letter-spacing: .03em; }
+  .privacy-state span { display: block; font-size: 12.5px; margin-top: 2px; }
+
   iframe.doc { width: 100%; height: 78vh; min-height: 560px; border: 0; display: block; border-radius: var(--r); background: #fff; }
   [hidden] { display: none !important; }
 
@@ -151,16 +160,32 @@
       <button type="button" id="tab-doc" aria-pressed="false">Document</button>
     </span>
     <span class="tabs">
-      <button type="button" onclick="location.href='?blind=1'" aria-pressed="{{ 'true' if anonymise else 'false' }}">Blind</button>
-      <button type="button" onclick="location.href='?blind=0'" aria-pressed="{{ 'false' if anonymise else 'true' }}">Named</button>
+      <button type="button" onclick="location.href='?blind=1'" aria-pressed="{{ 'true' if anonymise else 'false' }}">Blind client</button>
+      <button type="button" onclick="location.href='?blind=0'" aria-pressed="{{ 'false' if anonymise else 'true' }}">Named internal</button>
     </span>
-    <a class="btn sm" href="/dossier/{{ dossier_id }}/pdf?blind={{ 1 if anonymise else 0 }}">Download PDF</a>
+    <a class="btn sm" href="/dossier/{{ dossier_id }}/pdf?blind={{ 1 if anonymise else 0 }}">
+      {{ 'Download blind client PDF' if anonymise else 'Review named export' }}
+    </a>
   </div>
 </div>
 {% endblock %}
 
 {% block content %}
 <div class="page">
+
+  <div class="privacy-state {{ '' if anonymise else 'named' }}" role="status">
+    <div>
+      <b>{{ 'BLIND CLIENT VIEW' if anonymise else 'NAMED · INTERNAL VIEW' }}</b>
+      <span>
+        {% if anonymise %}
+          Identity is removed from the report, evidence pane and client PDF. Final export is privacy-checked.
+        {% else %}
+          Candidate identity is visible. A separate confirmation is required before a named PDF can be downloaded.
+        {% endif %}
+      </span>
+    </div>
+    <span class="pill {{ 'ok' if anonymise else 'bad' }}">{{ 'CLIENT-SAFE' if anonymise else 'DO NOT SHARE' }}</span>
+  </div>
 
   {% if is_demo %}
   <div class="notice info reveal" style="margin-bottom:16px;">

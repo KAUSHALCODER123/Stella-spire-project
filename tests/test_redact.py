@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from app.render.dossier import render_html
-from app.render.redact import redact_text
+from app.render.redact import BlindExportError, assert_no_identity_leaks, identity_leaks, redact_text
 from tests.fixtures import sample_dossier
 
 KW = {"full_name": "Meera Ramanathan", "email": "meera.ramanathan.fin@gmail.com", "phone": "+91 98860 41277"}
@@ -188,3 +188,21 @@ def test_bracket_placeholder_is_left_alone():
     """'[candidate]' is a redaction marker, not prose; do not case-fix it."""
     out = redact_text("Meera Ramanathan is here.", replacement="[candidate]", **KW)
     assert out.startswith("[candidate]")
+
+
+def test_final_privacy_check_reports_field_labels_not_personal_values():
+    profile = sample_dossier().profile
+    leaks = identity_leaks("Meera Ramanathan · +91 98860 41277", profile)
+    assert leaks == ["candidate name", "phone number"]
+
+    with pytest.raises(BlindExportError) as caught:
+        assert_no_identity_leaks("Meera Ramanathan · +91 98860 41277", profile)
+    message = str(caught.value)
+    assert "candidate name" in message and "phone number" in message
+    assert "Meera" not in message and "98860" not in message
+
+
+def test_final_privacy_check_accepts_a_redacted_render():
+    dossier = sample_dossier()
+    html = render_html(dossier, anonymise=True)
+    assert_no_identity_leaks(html, dossier.profile)

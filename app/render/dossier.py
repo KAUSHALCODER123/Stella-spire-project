@@ -24,7 +24,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.config import settings
 from app.pipeline import Dossier
-from app.render.redact import redact_dossier
+from app.render.redact import assert_no_identity_leaks, redact_dossier
 
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
@@ -228,4 +228,27 @@ def html_to_pdf(html: str, out_path: str | Path, *, ref: str = "") -> Path:
 
 def render_pdf(dossier: Dossier, out_path: str | Path, *, anonymise: Optional[bool] = None) -> Path:
     html = render_html(dossier, anonymise=anonymise)
-    return html_to_pdf(html, out_path, ref=candidate_ref(dossier))
+    if anonymise:
+        # This is the last check before Chromium receives the client-facing
+        # document. A regression in a template or new free-text field must
+        # stop the export rather than quietly produce a mislabelled PDF.
+        assert_no_identity_leaks(html, dossier.profile)
+
+    rendered = html_to_pdf(html, out_path, ref=candidate_ref(dossier))
+
+    if anonymise:
+        # Check the actual artifact as well as its HTML source. This catches
+        # identifiers introduced by print-only content, headers or footers.
+        import fitz
+
+        try:
+            with fitz.open(rendered) as pdf:
+                pdf_text = "\n".join(page.get_text("text") for page in pdf)
+            assert_no_identity_leaks(pdf_text, dossier.profile)
+        except Exception:
+            # A failed privacy check must never leave a plausible-looking
+            # client PDF behind for someone to attach manually.
+            Path(rendered).unlink(missing_ok=True)
+            raise
+
+    return rendered

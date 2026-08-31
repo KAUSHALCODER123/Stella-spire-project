@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Confirm named export — SpireDossier{% endblock %}
+
+{% block chrome %}
+<div class="topbar">
+  <div>
+    <div class="crumb"><a href="/dossier/{{ dossier_id }}?blind=0" style="color:inherit;">Match report</a> / Export</div>
+    <h1>Confirm named internal export</h1>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page" style="max-width:760px;">
+  <div class="card reveal" style="border-color:#F0B9B7;">
+    <div class="card-head">
+      <h2>This is not a blind client dossier</h2>
+      <span class="pill bad">NAMED · INTERNAL</span>
+    </div>
+    <div class="card-body">
+      <div class="notice warn" style="margin-bottom:18px;">
+        This PDF includes the candidate's name and may include their email, phone number,
+        profile links and identifying CV content. Use the blind export for client review.
+      </div>
+
+      <dl style="display:grid;grid-template-columns:150px 1fr;gap:10px 16px;margin:0 0 22px;font-size:14px;">
+        <dt class="hint">Candidate</dt><dd style="margin:0;font-weight:600;">{{ candidate_name }}</dd>
+        <dt class="hint">Role</dt><dd style="margin:0;">{{ role_title }}</dd>
+        <dt class="hint">Filename</dt><dd style="margin:0;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;">{{ export_filename }}</dd>
+      </dl>
+
+      <form method="get" action="/dossier/{{ dossier_id }}/pdf" style="display:flex;gap:10px;flex-wrap:wrap;">
+        <input type="hidden" name="blind" value="0">
+        <input type="hidden" name="confirm_named" value="1">
+        <button class="btn" type="submit" style="background:var(--bad);border-color:var(--bad);">Download named internal PDF</button>
+        <a class="btn ghost" href="/dossier/{{ dossier_id }}?blind=1">Return to blind client view</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

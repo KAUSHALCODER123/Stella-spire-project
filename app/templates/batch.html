@@ -72,10 +72,24 @@
   .failrow b { font-weight: 600; }
   .failrow span { color: var(--bad); }
 
+  .triagebar {
+    display: grid; grid-template-columns: minmax(180px,1.4fr) repeat(4,minmax(130px,.7fr));
+    gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border-2);
+    background: var(--surface-2);
+  }
+  .triagebar input, .triagebar select { min-width: 0; }
+  .decision-form select { min-width: 126px; font-size: 12.5px; padding: 7px 28px 7px 9px; }
+  tr[data-decision="shortlist"] { box-shadow: inset 3px 0 0 var(--ok); }
+  tr[data-decision="maybe"] { box-shadow: inset 3px 0 0 var(--warn); }
+  tr[data-decision="reject"] { opacity: .58; }
+  .empty-filter { padding: 28px 20px; text-align: center; color: var(--ink-4); }
+
   @media (max-width: 900px) {
     table.rank th:nth-child(5), table.rank td:nth-child(5),
     table.rank th:nth-child(6), table.rank td:nth-child(6) { display: none; }
     .scroll-x > table.rank { min-width: 520px; }
+    .triagebar { grid-template-columns: 1fr 1fr; }
+    .triagebar input:first-child { grid-column: 1 / -1; }
   }
   @media (max-width: 640px) {
     .summary { grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -87,6 +101,8 @@
     .runbar { gap: 12px; }
     .cand .av { width: 32px; height: 32px; }
     .covwrap { min-width: 120px; }
+    .triagebar { grid-template-columns: 1fr; }
+    .triagebar input:first-child { grid-column: auto; }
   }
 </style>
 {% endblock %}
@@ -169,13 +185,45 @@
       <div class="k">{% if spend.free %}Cost{% else %}Approx. cost{% endif %}</div>
       {% if not spend.known %}<div class="n">{{ model }} is not in the price table</div>{% endif %}
     </div>
+    <div class="card sc reveal">
+      <div class="v num" id="shortlist-count">{{ ranked | selectattr('decision', 'equalto', 'shortlist') | list | length }}</div>
+      <div class="k">Recruiter shortlist</div>
+    </div>
   </div>
 
   {% if ranked %}
   <div class="card reveal">
     <div class="card-head">
       <h2>Ranked against the brief</h2>
-      <span class="hint">Must-have coverage, then strong matches, then fewest high flags</span>
+      <span class="hint"><span id="visible-count">{{ ranked|length }}</span> shown · decisions stay with this run</span>
+    </div>
+    <div class="triagebar" aria-label="Shortlist filters">
+      <input id="candidate-search" type="search" placeholder="Search candidate or filename">
+      <select id="decision-filter" aria-label="Filter by decision">
+        <option value="all">All decisions</option>
+        <option value="unreviewed">Unreviewed</option>
+        <option value="shortlist">Shortlisted</option>
+        <option value="maybe">Maybe</option>
+        <option value="reject">Rejected</option>
+      </select>
+      <select id="coverage-filter" aria-label="Minimum must-have coverage">
+        <option value="0">Any coverage</option>
+        <option value="50">50%+ coverage</option>
+        <option value="70">70%+ coverage</option>
+        <option value="90">90%+ coverage</option>
+      </select>
+      <select id="risk-filter" aria-label="Filter by review risk">
+        <option value="all">Any review flags</option>
+        <option value="clean">No high flags</option>
+        <option value="verified">90%+ evidence</option>
+      </select>
+      <select id="sort-results" aria-label="Sort results">
+        <option value="rank">Recommended rank</option>
+        <option value="score">Highest match score</option>
+        <option value="coverage">Highest coverage</option>
+        <option value="evidence">Best verified evidence</option>
+        <option value="flags">Fewest high flags</option>
+      </select>
     </div>
     <div class="card-body">
       <div class="scroll-x">
@@ -183,14 +231,18 @@
         <thead>
           <tr>
             <th></th><th>Candidate</th><th>Match score</th>
-            <th>Requirements</th><th>Experience</th><th>Evidence</th><th></th>
+            <th>Requirements</th><th>Experience</th><th>Evidence</th><th>Decision</th><th></th>
           </tr>
         </thead>
         <tbody>
           {% for item in ranked %}
           {% set d = item.dossier %}
           {% set su = d.suitability %}
-          <tr>
+          <tr data-candidate="{{ ((d.profile.full_name or item.filename) ~ ' ' ~ item.filename) | lower }}"
+              data-rank="{{ loop.index }}" data-score="{{ su.percent }}"
+              data-coverage="{{ (item.coverage * 100) | round | int }}"
+              data-evidence="{{ ((d.verification.rate if d.verification else 0) * 100) | round | int }}"
+              data-flags="{{ item.high_flags }}" data-decision="{{ item.decision }}">
             <td class="pos"><span>{{ loop.index }}</span></td>
             <td>
               <span class="cand">
@@ -225,11 +277,23 @@
                   {{ d.verification.verified }}/{{ d.verification.total }}</span>
               {% else %}<span class="pill plain">—</span>{% endif %}
             </td>
+            <td>
+              <form class="decision-form" method="post" action="/batch/{{ batch.id }}/decision">
+                <input type="hidden" name="item_index" value="{{ item.index }}">
+                <select name="decision" aria-label="Decision for {{ d.profile.full_name or item.filename }}" onchange="this.form.submit()">
+                  <option value="unreviewed" {% if item.decision == 'unreviewed' %}selected{% endif %}>Unreviewed</option>
+                  <option value="shortlist" {% if item.decision == 'shortlist' %}selected{% endif %}>Shortlist</option>
+                  <option value="maybe" {% if item.decision == 'maybe' %}selected{% endif %}>Maybe</option>
+                  <option value="reject" {% if item.decision == 'reject' %}selected{% endif %}>Reject</option>
+                </select>
+              </form>
+            </td>
             <td style="text-align:right;"><a class="btn sm ghost" href="/dossier/{{ item.dossier_id }}">Open</a></td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+      <div id="empty-filter" class="empty-filter" hidden>No candidates match these filters.</div>
       </div>
     </div>
   </div>
@@ -269,6 +333,49 @@
       if (t < 1) requestAnimationFrame(tick);
     })(start);
   });
+
+  // Recruiter triage is deliberately local and instant: filtering and
+  // sorting never rerun a model or lose the server-side decision state.
+  var tbody = document.querySelector("table.rank tbody");
+  if (tbody) {
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+    var controls = ["candidate-search", "decision-filter", "coverage-filter", "risk-filter", "sort-results"]
+      .map(function (id) { return document.getElementById(id); });
+
+    function number(row, key) { return parseFloat(row.dataset[key] || "0"); }
+    function applyTriage() {
+      var query = document.getElementById("candidate-search").value.trim().toLowerCase();
+      var decision = document.getElementById("decision-filter").value;
+      var coverage = parseFloat(document.getElementById("coverage-filter").value || "0");
+      var risk = document.getElementById("risk-filter").value;
+      var sort = document.getElementById("sort-results").value;
+
+      rows.sort(function (a, b) {
+        if (sort === "score") return number(b, "score") - number(a, "score");
+        if (sort === "coverage") return number(b, "coverage") - number(a, "coverage");
+        if (sort === "evidence") return number(b, "evidence") - number(a, "evidence");
+        if (sort === "flags") return number(a, "flags") - number(b, "flags");
+        return number(a, "rank") - number(b, "rank");
+      }).forEach(function (row) { tbody.appendChild(row); });
+
+      var shown = 0;
+      rows.forEach(function (row) {
+        var visible = (!query || row.dataset.candidate.indexOf(query) !== -1) &&
+          (decision === "all" || row.dataset.decision === decision) &&
+          number(row, "coverage") >= coverage &&
+          (risk !== "clean" || number(row, "flags") === 0) &&
+          (risk !== "verified" || number(row, "evidence") >= 90);
+        row.hidden = !visible;
+        if (visible) shown += 1;
+      });
+      document.getElementById("visible-count").textContent = shown;
+      document.getElementById("empty-filter").hidden = shown !== 0;
+    }
+
+    controls.forEach(function (control) {
+      control.addEventListener(control.tagName === "INPUT" ? "input" : "change", applyTriage);
+    });
+  }
 
   if (!running) return;
 
